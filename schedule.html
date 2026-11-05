@@ -272,6 +272,53 @@ nav svg{width:26px;height:26px}
 .a2 .tx{flex:1;font-size:14px;font-weight:700;line-height:1.25}
 .a2 .go{background:var(--accent);color:#fff;border-radius:12px;padding:9px 13px;font-weight:800;font-size:14px}
 .a2 .x{color:var(--muted);font-size:16px;padding:6px 8px}
+
+/* ---------- первый запуск ---------- */
+.onb{position:fixed;inset:0;z-index:900;background:var(--bg);display:flex;flex-direction:column;padding:calc(env(safe-area-inset-top,0px) + var(--tg-top,0px) + 14px) 0 calc(env(safe-area-inset-bottom,0px) + 18px);transition:opacity .35s}
+.onb.out{opacity:0;pointer-events:none}
+.onb .top{display:flex;justify-content:space-between;align-items:center;padding:0 20px;min-height:36px}
+.onb .skip{color:var(--muted);font-weight:700;font-size:15px;padding:8px 4px}
+.onb .dots{display:flex;gap:6px}
+.onb .dots i{width:7px;height:7px;border-radius:4px;background:var(--line);transition:.25s}
+.onb .dots i.on{width:22px;background:var(--accent)}
+.onb .vp{flex:1;min-height:0;overflow:hidden;position:relative;touch-action:pan-y}
+.onb .tr{display:flex;height:100%;transition:transform .4s cubic-bezier(.2,.8,.2,1)}
+.onb .sl{flex:0 0 100%;height:100%;overflow-y:auto;padding:10px 26px 10px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.onb .sl h2{margin:18px 0 8px;font-size:clamp(24px,7vw,30px);font-weight:800;letter-spacing:-.02em;line-height:1.15}
+.onb .sl p{margin:0;color:var(--muted);font-size:16px;font-weight:500;line-height:1.45;max-width:340px}
+.onb .art{width:100%;max-width:330px;min-height:230px;display:flex;align-items:center;justify-content:center;margin-top:6px}
+.onb .foot{padding:10px 22px 0;display:flex;gap:10px}
+.onb .foot .btn{margin:0}
+.onb .foot .btn.s{flex:0 0 28%}
+.onb .grps{width:100%;max-width:340px;margin-top:16px;display:flex;flex-direction:column;gap:10px}
+.onb .grps button{display:flex;align-items:center;justify-content:space-between;background:var(--card);border:2px solid var(--line);border-radius:20px;padding:16px 18px;font-weight:800;font-size:18px;transition:.2s}
+.onb .grps button::after{content:"";width:24px;height:24px;border-radius:50%;border:2px solid var(--line);flex:none}
+.onb .grps button.on{border-color:var(--accent);background:rgba(var(--accent-rgb),.12)}
+.onb .grps button.on::after{background:var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center/16px no-repeat;border-color:var(--accent)}
+.onb .logo{animation:pop .7s cubic-bezier(.2,1.4,.4,1) both;filter:drop-shadow(0 18px 40px rgba(79,91,255,.45))}
+/* мини-макеты */
+.mk{width:100%;border-radius:26px;background:var(--card);border:1px solid var(--line);padding:14px;text-align:left;box-shadow:0 20px 50px -24px rgba(0,0,0,.5)}
+.mk .st{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:12px}
+.mk .st span{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0;border-radius:12px;font-size:10px;font-weight:700;color:var(--muted)}
+.mk .st span b{font-size:14px;color:var(--text)}
+.mk .st span.on{background:rgba(var(--accent-rgb),.16);color:var(--accent)}.mk .st span.on b{color:var(--accent)}
+.mk .cd{display:flex;gap:9px;background:var(--bg);border-radius:16px;padding:10px 12px;margin-bottom:8px;align-items:center}
+.mk .cd i{width:4px;align-self:stretch;border-radius:3px;background:var(--c)}
+.mk .cd div{flex:1;min-width:0;font-size:12.5px;font-weight:800;line-height:1.2}
+.mk .cd div small{display:block;color:var(--muted);font-weight:600;font-size:11px;margin-top:2px}
+.mk .cd em{font-style:normal;font-weight:800;font-size:13px}
+.mk .nx{background:var(--bg);border-left:4px solid var(--lec);border-radius:12px;padding:8px 10px;font-size:11.5px;font-weight:700;color:var(--muted);margin-bottom:10px}
+.mk .nx b{color:var(--lec)}
+.mk .sw{animation:swp 2.6s ease-in-out infinite}
+@keyframes swp{0%,100%{transform:translateX(0)}35%{transform:translateX(-14px)}70%{transform:translateX(10px)}}
+.mk .dh{font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:4px 2px 6px}
+.mk .big{font-size:26px}
+.mk .pill{display:inline-block;font-size:10.5px;font-weight:800;border:1px solid var(--c);color:var(--c);border-radius:8px;padding:2px 7px;margin:8px 4px 0 0}
+.mk .set{display:flex;align-items:center;justify-content:space-between;font-weight:700;font-size:13px;padding:9px 2px;border-bottom:1px solid var(--line)}
+.mk .set:last-child{border:0}
+.mk .set .tg{width:38px;height:22px;border-radius:11px;background:var(--accent);position:relative}
+.mk .set .tg::after{content:"";position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:#fff}
+.mk .set .sws{display:flex;gap:6px}.mk .set .sws i{width:16px;height:16px;border-radius:50%;background:var(--c)}
 </style>
 </head>
 <body>
@@ -1182,7 +1229,7 @@ function hsAction(){
 /* мягкое приглашение — один раз за сессию, со второго запуска */
 function hideA2(){const a=$('#a2');if(a)a.classList.remove('on')}
 function maybeInvite(){
-  if(settings.hsDismissed||settings.launches<2||view!=='sch')return;
+  if(settings.hsDismissed||settings.launches<2||view!=='sch'||$('#onb'))return;
   if(!['tg-can','pwa','ios'].includes(hs.state))return;
   const a=$('#a2');
   a.innerHTML='<span class="ic">📲</span><span class="tx">Добавьте расписание на главный экран</span><button class="go" id="a2go">Добавить</button><button class="x" id="a2x" aria-label="Закрыть">✕</button>';
@@ -1214,6 +1261,7 @@ function renderSettings(){
     '<div class="row"><span>Преподаватели</span><button class="tog'+(settings.teachers?' on':'')+'" id="tgT"></button></div>'+
     '<div class="row"><span>Время окончания пары</span><button class="tog'+(settings.endTime?' on':'')+'" id="tgE"></button></div></div></div>'+
   (hsBlock?'<div class="grp"><h4>Приложение</h4><div class="box">'+hsBlock+'</div></div>':'')+
+  '<div class="grp"><h4>Помощь</h4><div class="box"><div class="pad"><button class="btn s" id="tourBtn">Показать обучение</button></div></div></div>'+
   '<div class="grp"><h4>Расписание</h4><div class="box">'+
     '<div class="kv"><span>Файл</span><span>'+esc(data.file||'—')+(data.isDefault?' (с сервера)':' (загружен вручную)')+'</span></div>'+
     '<div class="kv"><span>Период</span><span>'+df(w0.start)+' — '+df(w1.end)+'</span></div>'+
@@ -1232,6 +1280,7 @@ function renderSettings(){
   $('#tgE').onclick=()=>{settings.endTime=!settings.endTime;saveSettings();renderAll(true);renderSettings()};
   $('#credit').onclick=e=>{if(tg&&tg.openTelegramLink&&inTg){e.preventDefault();tg.openTelegramLink('https://t.me/yotonick')}};
   $('#upBtn').onclick=()=>$('#file').click();
+  $('#tourBtn').onclick=()=>startOnboarding(true);
   const h=$('#hsBtn');if(h)h.onclick=hsAction;
   $('#chkBtn').onclick=async()=>{
     const b=$('#chkBtn');b.textContent='Проверяем…';
@@ -1289,6 +1338,79 @@ function minuteTick(){
 setInterval(minuteTick,30000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){minuteTick();maybeSync()}});
 
+/* ---------- первый запуск: выбор группы + обучение ---------- */
+const LOGO=($('#splash svg')||{outerHTML:''}).outerHTML;
+const ONB_KEY='sch.onboarded';
+function cloudGet(k,cb){
+  try{
+    if(inTg&&tg.CloudStorage&&tg.isVersionAtLeast&&tg.isVersionAtLeast('6.9')){
+      let done=false;const f=v=>{if(done)return;done=true;cb(v)};
+      tg.CloudStorage.getItem(k,(e,v)=>f(e?null:v));setTimeout(()=>f(null),1200);return;
+    }
+  }catch(e){}
+  cb(null);
+}
+function cloudSet(k,v){try{if(inTg&&tg.CloudStorage&&tg.isVersionAtLeast&&tg.isVersionAtLeast('6.9'))tg.CloudStorage.setItem(k,String(v))}catch(e){}}
+function onbDone(){
+  store.set(ONB_KEY,1);cloudSet('onboarded','1');cloudSet('group',settings.group||'');
+}
+function startOnboarding(replay){
+  if($('#onb'))return;
+  const multi=data.groups.length>1;
+  const logo=LOGO;
+  const canHs=['tg-can','pwa','ios'].includes(hs.state);
+  const S=[];
+  S.push('<div class="art">'+logo.replace('<svg','<svg class="logo"')+'</div><h2>Добро пожаловать!</h2><p>Расписание Академии управления всегда под рукой: пары, аудитории и преподаватели без лишних поисков.</p>');
+  if(multi)S.push('<h2 style="margin-top:34px">Выберите свою группу</h2><p>Её можно сменить позже в настройках.</p><div class="grps" id="onbG">'+data.groups.map(g=>'<button data-g="'+esc(g)+'" class="'+(g===settings.group?'on':'')+'">'+esc(g)+'</button>').join('')+'</div>');
+  S.push('<div class="art"><div class="mk"><div class="nx"><b>Следующая:</b> Базы данных · через 25 мин</div><div class="st"><span>ПН<b>2</b></span><span>ВТ<b>3</b></span><span>СР<b>4</b></span><span class="on">ЧТ<b>5</b></span><span>ПТ<b>6</b></span><span>СБ<b>7</b></span><span>ВС<b>8</b></span></div><div class="sw"><div class="cd" style="--c:var(--lec)"><i></i><div>Информационные системы<small>Лекция · каб. 807</small></div><em>15:00</em></div><div class="cd" style="--c:var(--lab)"><i></i><div>Системы баз данных<small>Лабораторная · каб. 505</small></div><em>16:35</em></div></div></div></div><h2>Ваш день</h2><p>Листайте влево и вправо, чтобы менять дни. Нажмите на пару — откроются время, аудитория и преподаватели. Сверху — сколько осталось до следующей пары.</p>');
+  S.push('<div class="art"><div class="mk"><div class="dh">Понедельник, 2 ноября</div><div class="cd" style="--c:var(--pr)"><i></i><div>Иностранный язык<small>Практика · каб. 806а</small></div><em>13:25</em></div><div class="cd" style="--c:var(--lab)"><i></i><div>Анализ управленческих решений<small>Лабораторная · каб. 513</small></div><em>15:00</em></div><div class="dh">Вторник, 3 ноября</div><div class="cd" style="--c:var(--lec)"><i></i><div>Правовое регулирование<small>Лекция · каб. 807</small></div><em>15:00</em></div></div></div><h2>Вся неделя сразу</h2><p>Вкладка «Неделя» показывает все пары подряд. Листайте недели вперёд и назад, чтобы спланировать загрузку.</p>');
+  S.push('<div class="art"><div class="mk"><div class="big">8<small> пар осталось из 26</small></div><div class="prog"><i style="width:70%"></i></div><div class="sm" style="margin-bottom:6px">Информационные системы и технологии</div><span class="pill" style="--c:var(--lec)">Лекции: ещё 3</span><span class="pill" style="--c:var(--lab)">Лабораторные: ещё 4</span><span class="pill" style="--c:var(--exam)">Зачёт: ✓</span><div class="sm" style="margin-top:12px">Дни впереди: Пн ×4 · Чт ×3</div></div></div><h2>Предметы и остаток пар</h2><p>Выберите предмет и узнайте, сколько пар осталось и в какие дни. Есть поиск по названию, преподавателю и аудитории, а также список ближайших зачётов и экзаменов.</p>');
+  S.push('<div class="art"><div class="mk"><div class="set"><span>Тема</span><span style="color:var(--muted)">Авто</span></div><div class="set"><span>Цвет акцента</span><span class="sws"><i style="--c:#4f5bff"></i><i style="--c:#19c37d"></i><i style="--c:#ff9f1c"></i><i style="--c:#ff5a7a"></i></span></div><div class="set"><span>Преподаватели</span><span class="tg"></span></div></div></div><h2>Настройте под себя</h2><p>Тема, цвет, показ преподавателей — всё в настройках.'+(canHs?' Добавьте расписание на главный экран, чтобы открывать его в одно касание.':'')+'</p>'+(canHs?'<button class="btn s" id="onbHs" style="margin-top:18px;max-width:340px">📲 Добавить на главный экран</button>':''));
+  const n=S.length;let i=0;
+  const el=document.createElement('div');el.className='onb';el.id='onb';
+  el.innerHTML='<div class="top"><div class="dots">'+S.map((_,k)=>'<i'+(k===0?' class="on"':'')+'></i>').join('')+'</div><button class="skip" id="onbSkip">Пропустить</button></div>'+
+    '<div class="vp" id="onbVp"><div class="tr" id="onbTr">'+S.map(h=>'<div class="sl">'+h+'</div>').join('')+'</div></div>'+
+    '<div class="foot"><button class="btn s" id="onbBack" style="display:none">Назад</button><button class="btn p" id="onbNext">Начать</button></div>';
+  document.body.appendChild(el);
+  const tr=$('#onbTr'),next=$('#onbNext'),back=$('#onbBack');
+  const upd=()=>{
+    tr.style.transform='translateX('+(-100*i)+'%)';
+    [...el.querySelectorAll('.dots i')].forEach((d,k)=>d.classList.toggle('on',k===i));
+    back.style.display=i?'block':'none';
+    next.textContent=i===n-1?(replay?'Готово':'Открыть расписание'):i===0?'Начать':'Далее';
+    $('#onbSkip').style.visibility=i===n-1?'hidden':'visible';
+    tick();
+  };
+  const finish=()=>{
+    onbDone();buildIndex();saveSettings();
+    el.classList.add('out');setTimeout(()=>el.remove(),400);
+    if(replay){refreshView()}else{renderAll();setTimeout(maybeInvite,6000)}
+  };
+  next.onclick=()=>{if(i<n-1){i++;upd()}else finish()};
+  back.onclick=()=>{if(i>0){i--;upd()}};
+  $('#onbSkip').onclick=finish;
+  const g=$('#onbG');
+  if(g)g.onclick=e=>{const b=e.target.closest('button');if(!b)return;settings.group=b.dataset.g;saveSettings();buildIndex();
+    [...g.children].forEach(x=>x.classList.toggle('on',x===b));tick()};
+  const hb=$('#onbHs');if(hb)hb.onclick=hsAction;
+  let sx=0,sy=0;const vp=$('#onbVp');
+  vp.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY},{passive:true});
+  vp.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;
+    if(Math.abs(dx)>60&&Math.abs(dx)>Math.abs(dy)*1.5){if(dx<0&&i<n-1){i++;upd()}else if(dx>0&&i>0){i--;upd()}}});
+  upd();
+}
+function maybeOnboard(){
+  if(store.get(ONB_KEY))return;
+  cloudGet('onboarded',v=>{
+    if(v==='1'){
+      store.set(ONB_KEY,1);
+      cloudGet('group',g=>{if(g&&data.groups.includes(g)&&settings.group!==g){settings.group=g;saveSettings();buildIndex();refreshView()}});
+      return;
+    }
+    startOnboarding(false);
+  });
+}
+
 /* ---------- старт ---------- */
 function showFatal(msg){
   const sp=$('#splash');
@@ -1303,6 +1425,7 @@ function boot(){
   renderAll();
   setTimeout(()=>{const sp=$('#splash');if(!sp)return;sp.classList.add('hide');setTimeout(()=>sp.remove(),600)},700);
   hsDetect(()=>{if(view==='set')renderSettings();setTimeout(maybeInvite,2500)});
+  maybeOnboard();
 }
 try{if(tg){tg.ready();tg.expand();tg.disableVerticalSwipes&&tg.disableVerticalSwipes()}}catch(e){}
 applyTheme();
@@ -1320,7 +1443,7 @@ try{
 if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){
   window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 }
-window.__app={get sel(){return sel},get data(){return data},show,jump,sync,get hs(){return hs}};
+window.__app={startOnboarding,get sel(){return sel},get data(){return data},show,jump,sync,get hs(){return hs}};
 })();
 </script>
 </body>
