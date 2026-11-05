@@ -1240,6 +1240,56 @@ function maybeInvite(){
   setTimeout(hideA2,12000);
 }
 
+/* ---------- уведомления (через бота и Cloudflare Worker) ---------- */
+/* Адрес воркера вида https://schedule-bot.ИМЯ.workers.dev (без / на конце). Пусто — раздел скрыт. */
+const NOTIFY_API='';
+let nf=Object.assign({active:false,lead:10,morning:false,evening:false,updates:true},store.get('sch.notify')||{});
+const nfOK=()=>!!(NOTIFY_API&&inTg&&tg.initData);
+async function nfCall(path,body){
+  const r=await fetch(NOTIFY_API+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(Object.assign({initData:tg.initData},body))});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok||!j.ok)throw new Error(j.error||('HTTP '+r.status));
+  return j;
+}
+async function nfLoad(){
+  if(!nfOK())return;
+  try{
+    const j=await nfCall('/api/me',{});
+    if(j.prefs){nf=Object.assign(nf,j.prefs);delete nf.group;store.set('sch.notify',nf);if(view==='set')renderSettings()}
+  }catch(e){console.warn('notify:',e.message)}
+}
+function nfWrite(){
+  return new Promise(res=>{
+    try{if(tg.requestWriteAccess&&tg.isVersionAtLeast&&tg.isVersionAtLeast('6.9')){let d=false;tg.requestWriteAccess(ok=>{if(!d){d=true;res(!!ok)}});setTimeout(()=>{if(!d){d=true;res(true)}},20000);return}}catch(e){}
+    res(true);
+  });
+}
+async function nfSave(patch,needWrite){
+  const prev=Object.assign({},nf);Object.assign(nf,patch);
+  try{
+    if(needWrite&&!(await nfWrite())){Object.assign(nf,prev);toast('Разрешите боту писать вам — иначе напоминания не придут',true);if(view==='set')renderSettings();return false}
+    await nfCall('/api/settings',{prefs:{group:settings.group,active:nf.active,lead:+nf.lead,morning:nf.morning,evening:nf.evening,updates:nf.updates}});
+    store.set('sch.notify',nf);return true;
+  }catch(e){Object.assign(nf,prev);toast('Не удалось сохранить: '+e.message,true);if(view==='set')renderSettings();return false}
+}
+function nfHTML(){
+  if(!nfOK())return '';
+  const opts=[[0,'Не напоминать'],[5,'За 5 минут'],[10,'За 10 минут'],[15,'За 15 минут'],[20,'За 20 минут'],[30,'За 30 минут'],[60,'За час']];
+  const tog=(id,t,on)=>'<div class="row"><span>'+t+'</span><button class="tog'+(on?' on':'')+'" id="'+id+'"></button></div>';
+  return '<div class="grp"><h4>Уведомления</h4><div class="box">'+tog('nfOn','Напоминания в Telegram',nf.active)+
+    (nf.active?'<div class="row"><span>Перед парой</span><select id="nfLead">'+opts.map(([v,t])=>'<option value="'+v+'"'+(+nf.lead===v?' selected':'')+'>'+t+'</option>').join('')+'</select></div>'+
+      tog('nfMorn','Утренняя сводка',nf.morning)+tog('nfEve','Вечером про завтра',nf.evening)+tog('nfUpd','Расписание обновилось',nf.updates):'')+
+    '</div><p class="info" style="margin-top:8px">Сообщения приходят от бота в Telegram. Утренняя сводка — в 7:30, вечерняя — в 20:00.</p></div>';
+}
+function nfBind(){
+  if(!nfOK())return;
+  const on=$('#nfOn');if(!on)return;
+  on.onclick=async()=>{const v=!nf.active;const ok=await nfSave(v?{active:true,lead:nf.lead||10}:{active:false},v);if(ok){renderSettings();toast(v?'Напоминания включены':'Напоминания выключены')}};
+  const bind=(id,k)=>{const b=$(id);if(b)b.onclick=async()=>{if(await nfSave({[k]:!nf[k]}))renderSettings()}};
+  bind('#nfMorn','morning');bind('#nfEve','evening');bind('#nfUpd','updates');
+  const l=$('#nfLead');if(l)l.onchange=async e=>{await nfSave({lead:+e.target.value})};
+}
+
 /* ---------- настройки ---------- */
 function fmtDate(iso){try{const d=new Date(iso);return d.getDate()+' '+MONTHS[d.getMonth()]+' '+d.getFullYear()+', '+pad(d.getHours())+':'+pad(d.getMinutes())}catch(e){return ''}}
 function fmtTs(ts){return ts?fmtDate(new Date(ts).toISOString()):'—'}
@@ -1262,7 +1312,7 @@ function renderSettings(){
     '<div class="row"><span>Преподаватели</span><button class="tog'+(settings.teachers?' on':'')+'" id="tgT"></button></div>'+
     '<div class="row"><span>Время окончания пары</span><button class="tog'+(settings.endTime?' on':'')+'" id="tgE"></button></div></div></div>'+
   (hsBlock?'<div class="grp"><h4>Приложение</h4><div class="box">'+hsBlock+'</div></div>':'')+
-  '<div class="grp"><h4>Помощь</h4><div class="box"><div class="pad"><button class="btn s" id="tourBtn">Показать обучение</button></div></div></div>'+
+  nfHTML()+'<div class="grp"><h4>Помощь</h4><div class="box"><div class="pad"><button class="btn s" id="tourBtn">Показать обучение</button></div></div></div>'+
   '<div class="grp"><h4>Расписание</h4><div class="box">'+
     '<div class="kv"><span>Файл</span><span>'+esc(data.file||'—')+(data.isDefault?' (с сервера)':' (загружен вручную)')+'</span></div>'+
     '<div class="kv"><span>Период</span><span>'+df(w0.start)+' — '+df(w1.end)+'</span></div>'+
@@ -1274,7 +1324,7 @@ function renderSettings(){
     '<p class="info" style="margin-top:12px">Расписание подгружается с сервера автоматически при каждом открытии. Файл, загруженный вручную, подойдёт с той же структурой (то, что присылают методисты), хранится только на этом устройстве и заменится, как только на сервере появится новая версия.</p></div>'+
   '<div class="credit">Dev: <a href="https://t.me/yotonick" id="credit">@yotonick</a> · v'+APP_VER+'</div>';
   $('#set').scrollTop=sc;
-  $('#grpSel').onchange=e=>{settings.group=e.target.value;saveSettings();buildIndex();renderAll();renderSettings()};
+  $('#grpSel').onchange=e=>{settings.group=e.target.value;saveSettings();buildIndex();renderAll();renderSettings();if(nf.active&&nfOK())nfSave({})};
   $('#thSeg').onclick=e=>{const b=e.target.closest('button');if(!b)return;settings.theme=b.dataset.v;saveSettings();applyTheme();renderSettings()};
   $('#swatches').onclick=e=>{const b=e.target.closest('button');if(!b)return;settings.accent=b.dataset.c;saveSettings();applyTheme();renderSettings()};
   $('#tgT').onclick=()=>{settings.teachers=!settings.teachers;saveSettings();renderAll(true);renderSettings()};
@@ -1282,6 +1332,7 @@ function renderSettings(){
   $('#credit').onclick=e=>{if(tg&&tg.openTelegramLink&&inTg){e.preventDefault();tg.openTelegramLink('https://t.me/yotonick')}};
   $('#upBtn').onclick=()=>$('#file').click();
   $('#tourBtn').onclick=()=>startOnboarding(true);
+  nfBind();
   const h=$('#hsBtn');if(h)h.onclick=hsAction;
   $('#chkBtn').onclick=async()=>{
     const b=$('#chkBtn');b.textContent='Проверяем…';
@@ -1360,13 +1411,14 @@ function startOnboarding(replay){
   const multi=data.groups.length>1;
   const logo=LOGO;
   const canHs=['tg-can','pwa','ios'].includes(hs.state);
+  const canNf=nfOK()&&!nf.active;
   const S=[];
   S.push('<div class="art">'+logo.replace('<svg','<svg class="logo"')+'</div><h2>Добро пожаловать!</h2><p>Расписание Академии управления всегда под рукой: пары, аудитории и преподаватели без лишних поисков.</p>');
   if(multi)S.push('<h2 style="margin-top:34px">Выберите свою группу</h2><p>Её можно сменить позже в настройках.</p><div class="grps" id="onbG">'+data.groups.map(g=>'<button data-g="'+esc(g)+'" class="'+(g===settings.group?'on':'')+'">'+esc(g)+'</button>').join('')+'</div>');
   S.push('<div class="art"><div class="mk"><div class="nx"><b>Следующая:</b> Базы данных · через 25 мин</div><div class="st"><span>ПН<b>2</b></span><span>ВТ<b>3</b></span><span>СР<b>4</b></span><span class="on">ЧТ<b>5</b></span><span>ПТ<b>6</b></span><span>СБ<b>7</b></span><span>ВС<b>8</b></span></div><div class="sw"><div class="cd" style="--c:var(--lec)"><i></i><div>Информационные системы<small>Лекция · каб. 807</small></div><em>15:00</em></div><div class="cd" style="--c:var(--lab)"><i></i><div>Системы баз данных<small>Лабораторная · каб. 505</small></div><em>16:35</em></div></div></div></div><h2>Ваш день</h2><p>Листайте влево и вправо, чтобы менять дни. Нажмите на пару — откроются время, аудитория и преподаватели. Сверху — сколько осталось до следующей пары.</p>');
   S.push('<div class="art"><div class="mk"><div class="dh">Понедельник, 2 ноября</div><div class="cd" style="--c:var(--pr)"><i></i><div>Иностранный язык<small>Практика · каб. 806а</small></div><em>13:25</em></div><div class="cd" style="--c:var(--lab)"><i></i><div>Анализ управленческих решений<small>Лабораторная · каб. 513</small></div><em>15:00</em></div><div class="dh">Вторник, 3 ноября</div><div class="cd" style="--c:var(--lec)"><i></i><div>Правовое регулирование<small>Лекция · каб. 807</small></div><em>15:00</em></div></div></div><h2>Вся неделя сразу</h2><p>Вкладка «Неделя» показывает все пары подряд. Листайте недели вперёд и назад, чтобы спланировать загрузку.</p>');
   S.push('<div class="art"><div class="mk"><div class="big">8<small> пар осталось из 26</small></div><div class="prog"><i style="width:70%"></i></div><div class="sm" style="margin-bottom:6px">Информационные системы и технологии</div><span class="pill" style="--c:var(--lec)">Лекции: ещё 3</span><span class="pill" style="--c:var(--lab)">Лабораторные: ещё 4</span><span class="pill" style="--c:var(--exam)">Зачёт: ✓</span><div class="sm" style="margin-top:12px">Дни впереди: Пн ×4 · Чт ×3</div></div></div><h2>Предметы и остаток пар</h2><p>Выберите предмет и узнайте, сколько пар осталось и в какие дни. Есть поиск по названию, преподавателю и аудитории, а также список ближайших зачётов и экзаменов.</p>');
-  S.push('<div class="art"><div class="mk"><div class="set"><span>Тема</span><span style="color:var(--muted)">Авто</span></div><div class="set"><span>Цвет акцента</span><span class="sws"><i style="--c:#4f5bff"></i><i style="--c:#19c37d"></i><i style="--c:#ff9f1c"></i><i style="--c:#ff5a7a"></i></span></div><div class="set"><span>Преподаватели</span><span class="tg"></span></div></div></div><h2>Настройте под себя</h2><p>Тема, цвет, показ преподавателей — всё в настройках.'+(canHs?' Добавьте расписание на главный экран, чтобы открывать его в одно касание.':'')+'</p>'+(canHs?'<button class="btn s" id="onbHs" style="margin-top:18px;max-width:340px">📲 Добавить на главный экран</button>':''));
+  S.push('<div class="art"><div class="mk"><div class="set"><span>Тема</span><span style="color:var(--muted)">Авто</span></div><div class="set"><span>Цвет акцента</span><span class="sws"><i style="--c:#4f5bff"></i><i style="--c:#19c37d"></i><i style="--c:#ff9f1c"></i><i style="--c:#ff5a7a"></i></span></div><div class="set"><span>Преподаватели</span><span class="tg"></span></div></div></div><h2>Настройте под себя</h2><p>Тема, цвет, показ преподавателей — всё в настройках.'+(canNf?' Включите напоминания — бот пришлёт сообщение перед парой.':'')+(canHs?' А ярлык на главном экране открывает расписание в одно касание.':'')+'</p>'+(canNf?'<button class="btn s" id="onbNf" style="margin-top:18px;max-width:340px">🔔 Включить напоминания о парах</button>':'')+(canHs?'<button class="btn s" id="onbHs" style="margin-top:10px;max-width:340px">📲 Добавить на главный экран</button>':''));
   const n=S.length;let i=0;
   const el=document.createElement('div');el.className='onb';el.id='onb';
   el.innerHTML='<div class="top"><div class="dots">'+S.map((_,k)=>'<i'+(k===0?' class="on"':'')+'></i>').join('')+'</div><button class="skip" id="onbSkip">Пропустить</button></div>'+
@@ -1394,6 +1446,7 @@ function startOnboarding(replay){
   if(g)g.onclick=e=>{const b=e.target.closest('button');if(!b)return;settings.group=b.dataset.g;saveSettings();buildIndex();
     [...g.children].forEach(x=>x.classList.toggle('on',x===b));tick()};
   const hb=$('#onbHs');if(hb)hb.onclick=hsAction;
+  const nb=$('#onbNf');if(nb)nb.onclick=async()=>{nb.disabled=true;const ok=await nfSave({active:true,lead:10,updates:true},true);if(ok){nb.textContent='Напоминания включены ✓'}else nb.disabled=false};
   let sx=0,sy=0;const vp=$('#onbVp');
   vp.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY},{passive:true});
   vp.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;
@@ -1427,6 +1480,7 @@ function boot(){
   setTimeout(()=>{const sp=$('#splash');if(!sp)return;sp.classList.add('hide');setTimeout(()=>sp.remove(),600)},700);
   hsDetect(()=>{if(view==='set')renderSettings();setTimeout(maybeInvite,2500)});
   maybeOnboard();
+  nfLoad();
 }
 try{if(tg){tg.ready();tg.expand();tg.disableVerticalSwipes&&tg.disableVerticalSwipes()}}catch(e){}
 applyTheme();
