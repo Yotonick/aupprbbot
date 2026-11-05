@@ -320,6 +320,63 @@ nav svg{width:26px;height:26px}
 .mk .set .tg{width:38px;height:22px;border-radius:11px;background:var(--accent);position:relative}
 .mk .set .tg::after{content:"";position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:#fff}
 .mk .set .sws{display:flex;gap:6px}.mk .set .sws i{width:16px;height:16px;border-radius:50%;background:var(--c)}
+
+/* ---------- v2.1: палитры, размер текста, анимации ---------- */
+:root{--k:1}
+:root[data-theme="dark"][data-pal="oled"]{--bg:#000;--card:#0a0a0b;--bar:#0a0a0b;--line:#222226;--chip:#141416}
+:root[data-theme="dark"][data-pal="oled"] .sbox,:root[data-theme="dark"][data-pal="oled"] .a2{background:#121214}
+:root[data-theme="light"][data-pal="paper"]{--bg:#f3ead6;--card:#fbf6e8;--bar:#f9f2df;--line:#e2d6b8;--chip:#eadfc3;--text:#2b2416;--muted:#85784f;--lec:#2f8f2a;--pr:#c9690a;--sem:#c2386f;--lab:#2a6fc0;--exam:#c43a2c;--cur:#6a4fc9;--oth:#7e7458}
+:root[data-theme="light"][data-pal="paper"] .sbox,:root[data-theme="light"][data-pal="paper"] .a2{background:#efe4c8}
+:root[data-theme="light"][data-pal="paper"] .done{background:#efe4c8}
+
+/* размер текста: множитель --k */
+.main h3{font-size:calc(clamp(17px,5.1vw,21px)*var(--k))}
+.room{font-size:calc(17px*var(--k))}
+.teach .t b{font-size:calc(18px*var(--k))}
+.teach .t span{font-size:calc(15px*var(--k))}
+.teach .note{font-size:calc(14px*var(--k))}
+.side{max-width:calc(112px*var(--k))}
+.side .type{font-size:calc(15px*var(--k))}
+.side .t1{font-size:calc(27px*var(--k))}
+.side .t2{font-size:calc(17px*var(--k))}
+.wr .nmx b{font-size:calc(15px*var(--k))}
+.wr .nmx span{font-size:calc(12.5px*var(--k))}
+.wr .tm{font-size:calc(16px*var(--k));width:calc(50px*var(--k))}
+.sc h3{font-size:calc(16.5px*var(--k))}
+.next{font-size:calc(14px*var(--k))}
+
+/* выбор темы */
+.themes{display:flex;gap:10px;overflow-x:auto;padding:2px 2px 6px;scrollbar-width:none}
+.themes::-webkit-scrollbar{display:none}
+.themes button{flex:none;width:72px;text-align:center;font-size:12.5px;font-weight:700;color:var(--muted)}
+.themes .pv{display:block;height:60px;border-radius:15px;border:2px solid var(--line);margin-bottom:7px;position:relative;overflow:hidden;background:var(--b);transition:.2s}
+.themes .pv i{position:absolute;left:8px;right:8px;top:10px;height:11px;border-radius:5px;background:var(--c1)}
+.themes .pv i+i{top:27px;right:26px;background:var(--c2)}
+.themes .pv i+i+i{top:43px;right:40px;height:8px;background:var(--ac)}
+.themes button.on .pv{border-color:var(--accent);transform:scale(1.04)}
+.themes button.on{color:var(--accent)}
+.seg.fs button{padding:6px 4px;line-height:1}
+
+/* карточка «идёт сейчас» */
+.live{position:absolute;left:22px;right:22px;bottom:8px;height:3px;border-radius:2px;background:rgba(127,127,127,.22);overflow:hidden}
+.live i{display:block;height:100%;background:var(--c);border-radius:2px;transition:width 1s linear}
+.card.now{padding-bottom:26px}
+
+/* пустой день */
+.empty .nxt{margin-top:6px;padding:8px 14px;border-radius:14px;background:var(--chip);color:var(--text);font-weight:700;font-size:14px}
+.empty .e{animation:floaty 3.4s ease-in-out infinite}
+@keyframes floaty{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-8px) rotate(3deg)}}
+
+/* появление карточек */
+@keyframes cardIn{from{opacity:0;transform:translateY(16px) scale(.985)}to{opacity:1;transform:none}}
+.panel.anim .card{animation:cardIn .45s cubic-bezier(.2,.8,.2,1) both}
+.panel.anim .card:nth-child(2){animation-delay:.05s}.panel.anim .card:nth-child(3){animation-delay:.1s}
+.panel.anim .card:nth-child(4){animation-delay:.15s}.panel.anim .card:nth-child(5){animation-delay:.2s}.panel.anim .card:nth-child(n+6){animation-delay:.25s}
+.panel.anim .empty{animation:cardIn .5s both}
+.wd .wr{animation:cardIn .35s both}
+.sd.sel{animation:popd .3s cubic-bezier(.2,1.4,.4,1)}
+@keyframes popd{from{transform:scale(.88)}to{transform:none}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
@@ -736,7 +793,7 @@ const store={
 const shortDate=d=>WD_S[dow(d)]+', '+d.getDate()+' '+MONTHS[d.getMonth()].slice(0,3);
 
 /* ---------- состояние ---------- */
-let settings=Object.assign({theme:'auto',accent:ACCENTS[0],teachers:true,endTime:true,group:null,hsDismissed:false,launches:0},store.get('sch.settings')||{});
+let settings=Object.assign({theme:'auto',accent:ACCENTS[0],teachers:true,endTime:true,group:null,hsDismissed:false,launches:0,fs:0},store.get('sch.settings')||{});
 let data=null, byDate={}, sel=dayOnly(new Date()), calMonth=null, view='sch', wkStart=null, sjFilter='all', sjQuery='';
 let manual=null, cached=null, booted=false, lastToday=key(new Date()), lastSync=0, syncing=false;
 const saveSettings=()=>store.set('sch.settings',settings);
@@ -793,13 +850,17 @@ function resolveTheme(){
   return mq&&mq.matches?'dark':'light';
 }
 function applyTheme(){
-  const t=resolveTheme(),r=document.documentElement;
-  r.dataset.theme=t;
+  const th=settings.theme,r=document.documentElement;
+  const t=th==='oled'?'dark':th==='paper'?'light':resolveTheme();
+  const pal=th==='oled'?'oled':th==='paper'?'paper':'std';
+  r.dataset.theme=t;r.dataset.pal=pal;
   const a=settings.accent;r.style.setProperty('--accent',a);
   r.style.setProperty('--accent-rgb',[1,3,5].map(i=>parseInt(a.substr(i,2),16)).join(','));
-  const bg=t==='dark'?'#0a0a0b':'#f2f2f7';
+  r.style.setProperty('--k',[1,1.12,1.25][settings.fs]||1);
+  const bg=pal==='oled'?'#000000':pal==='paper'?'#f3ead6':t==='dark'?'#0a0a0b':'#f2f2f7';
+  const bar=pal==='oled'?'#0a0a0b':pal==='paper'?'#eadfc3':t==='dark'?'#1d1d21':'#ececf2';
   try{const m=document.querySelector('meta[name=theme-color]');if(m)m.content=bg}catch(e){}
-  try{if(tg){tg.setHeaderColor&&tg.setHeaderColor(bg);tg.setBackgroundColor&&tg.setBackgroundColor(bg);tg.setBottomBarColor&&tg.setBottomBarColor(t==='dark'?'#1d1d21':'#ececf2')}}catch(e){}
+  try{if(tg){tg.setHeaderColor&&tg.setHeaderColor(bg);tg.setBackgroundColor&&tg.setBackgroundColor(bg);tg.setBottomBarColor&&tg.setBottomBarColor(bar)}}catch(e){}
 }
 mq&&mq.addEventListener&&mq.addEventListener('change',()=>{if(settings.theme==='auto'){applyTheme()}});
 try{tg&&tg.onEvent&&tg.onEvent('themeChanged',()=>{if(settings.theme==='auto')applyTheme()})}catch(e){}
@@ -857,36 +918,53 @@ function fmtDur(ms){
 const myLessons=()=>data.lessons[settings.group]||[];
 
 /* ---------- рендер дня ---------- */
+const EMP_FREE=[['☕','Свободный день','Время для себя — или для долгов по лабам'],['🛋️','Занятий нет','Можно выдохнуть'],['🌿','Свободный день','Прогуляйтесь, пока есть возможность'],['🎧','Окно в расписании','Самое время для музыки']];
+const EMP_WK=[['😴','Выходной','Выспитесь как следует'],['🏖️','Выходной','Отдыхайте, до пар ещё далеко'],['🍕','Выходной','День без пар — день для пиццы']];
+function emptyHTML(d){
+  const pickI=(d.getDate()+d.getMonth())%1000;
+  let e,t,s;
+  if(!inRange(d)){
+    const before=d<weekStart0();
+    [e,t,s]=before?['🎒','Семестр ещё не начался','Этот день раньше загруженного расписания']:['🎉','Семестр окончен','Этот день позже загруженного расписания'];
+  }else{
+    [e,t,s]=(dow(d)===6?EMP_WK:EMP_FREE)[pickI%(dow(d)===6?EMP_WK:EMP_FREE).length];
+  }
+  let nxt='';
+  for(let i=1;i<=60;i++){
+    const x=addDays(d,i),ls=byDate[key(x)];
+    if(ls&&ls.length){nxt='<div class="nxt">Следующие занятия: '+(i===1?'завтра':shortDate(x)+' · через '+i+' дн.')+' в '+ls[0].t1+'</div>';break}
+  }
+  return '<div class="empty"><div class="e">'+e+'</div><b>'+t+'</b><span>'+s+'</span>'+nxt+'</div>';
+}
 function dayHTML(d){
   const ls=byDate[key(d)]||[];
-  if(!ls.length){
-    const out=!inRange(d);
-    const wk=dow(d)===6;
-    return '<div class="empty"><div class="e">📚</div><b>'+(out?'Вне расписания':wk?'Выходной':'Занятий нет')+'</b><span>'+(out?'Этот день не входит в загруженное расписание':'Можно отдохнуть')+'</span></div>';
-  }
+  if(!ls.length)return emptyHTML(d);
   const today=key(d)===key(new Date()),nm=nowMin();
   return ls.map((l,i)=>{
     const [label,cls]=typeInfo(l);
     const s=data.subjects[l.c]||{};
     const room=roomOf(l);
     const tc=settings.teachers?teachersOf(l):[];
-    let now=false,past=false;
-    if(today){now=nm>=toMin(l.t1)&&nm<toMin(l.t2);past=nm>=toMin(l.t2)}
+    let now=false,past=false,pct=0;
+    if(today){now=nm>=toMin(l.t1)&&nm<toMin(l.t2);past=nm>=toMin(l.t2);if(now)pct=Math.round((nm-toMin(l.t1))/(toMin(l.t2)-toMin(l.t1))*100)}
     let tHTML='';
     if(settings.teachers){
       if(tc.length)tHTML='<div class="teach">'+tc.map(t=>'<div class="t"><b>'+esc(t.name)+'</b><span>'+esc(t.pos)+'</span></div>').join('')+'</div>';
       else if(s.note)tHTML='<div class="teach"><div class="note">'+esc(s.ext?'По расписанию кафедры':s.note)+'</div></div>';
     }
     return '<article class="card '+cls+(now?' now':'')+(past?' past':'')+'" data-i="'+i+'">'+
-      '<div class="bar"></div><div class="main">'+(now?'<div class="chip">Идёт сейчас</div>':'')+
+      '<div class="bar"></div><div class="main">'+(now?'<div class="chip">Идёт сейчас · ещё '+(toMin(l.t2)-nm)+' мин</div>':'')+
       '<h3>'+esc(nameOf(l.c))+'</h3>'+(room?'<div class="room">каб. '+esc(room)+'</div>':'')+tHTML+'</div>'+
-      '<div class="side"><span class="type">'+esc(label)+'</span><b class="t1">'+l.t1+'</b>'+(settings.endTime?'<span class="t2">'+l.t2+'</span>':'')+'</div></article>';
+      '<div class="side"><span class="type">'+esc(label)+'</span><b class="t1">'+l.t1+'</b>'+(settings.endTime?'<span class="t2">'+l.t2+'</span>':'')+'</div>'+(now?'<div class="live"><i style="width:'+pct+'%"></i></div>':'')+'</article>';
   }).join('');
 }
 const panels=[...document.querySelectorAll('.panel')];
 const track=$('#track'),pager=$('#pager');
+let animNext=true;
 function renderPanels(keepScroll){
   const sc=panels[1].scrollTop;
+  const an=animNext;animNext=false;
+  panels.forEach((x,i)=>x.classList.toggle('anim',an&&i===1));
   [-1,0,1].forEach((o,i)=>{panels[i].innerHTML=dayHTML(addDays(sel,o));panels[i].scrollTop=(i===1&&keepScroll)?sc:0});
   track.style.transition='none';track.style.transform='translateX(-100%)';
 }
@@ -894,7 +972,12 @@ function renderHead(){
   const d=sel;
   $('#ttl').textContent=WD[dow(d)]+', '+d.getDate()+' '+MONTHS[d.getMonth()];
   const n=weekNo(d);
-  $('#sub').textContent=inRange(d)?n+'-ая учебная неделя':'Вне учебного расписания';
+  let extra='';
+  if(inRange(d)&&key(d)===key(new Date())){
+    if(!(byDate[key(d)]||[]).length)extra=' · сегодня свободно';
+    else for(let i=1;i<=7;i++){if(!(byDate[key(addDays(d,i))]||[]).length){extra=i===1?' · завтра выходной':' · до выходного '+i+' '+plural(i,'день','дня','дней');break}}
+  }
+  $('#sub').textContent=inRange(d)?n+'-ая учебная неделя'+extra:'Вне учебного расписания';
   $('#calBtn').textContent=d.getDate();
   $('#todayBtn').classList.toggle('show',key(d)!==key(new Date()));
   const m=monday(d),td=key(new Date());
@@ -915,7 +998,7 @@ function slide(dir,target){
 }
 $('#strip').addEventListener('click',e=>{const b=e.target.closest('.sd');if(!b)return;const d=fromKey(b.dataset.k);if(d>sel||d<sel)slide(d>sel?1:-1,d)});
 $('#todayBtn').onclick=()=>{const d=dayOnly(new Date());if(key(d)!==key(sel))slide(d>sel?1:-1,d)};
-function jump(k){sel=fromKey(k);show('sch');renderAll()}
+function jump(k){sel=fromKey(k);show('sch');animNext=true;renderAll()}
 
 /* ---------- «следующая пара» ---------- */
 function nextInfo(){
@@ -983,6 +1066,7 @@ function closeSheet(){ov.classList.remove('on');sheet.classList.remove('on')}
 ov.onclick=closeSheet;
 function openDetail(l){
   if(!l)return;
+  try{tg&&tg.HapticFeedback&&tg.HapticFeedback.impactOccurred('light')}catch(e){}
   const s=data.subjects[l.c]||{},[label,cls]=typeInfo(l),room=roomOf(l),d=fromKey(l.d);
   const tc=teachersOf(l),all=s.teachers||[];
   const kv=(k,v)=>v?'<div class="kv"><span>'+k+'</span><span>'+v+'</span></div>':'';
@@ -1025,7 +1109,7 @@ function bindCal(){
   $('#calOk').onclick=closeSheet;
   $('#mPrev').onclick=()=>{calMonth=new Date(calMonth.getFullYear(),calMonth.getMonth()-1,1);sheet.innerHTML=calHTML();bindCal()};
   $('#mNext').onclick=()=>{calMonth=new Date(calMonth.getFullYear(),calMonth.getMonth()+1,1);sheet.innerHTML=calHTML();bindCal()};
-  sheet.querySelectorAll('.cg .d[data-k]').forEach(b=>b.onclick=()=>{sel=fromKey(b.dataset.k);renderAll();sheet.innerHTML=calHTML();bindCal();tick()});
+  sheet.querySelectorAll('.cg .d[data-k]').forEach(b=>b.onclick=()=>{sel=fromKey(b.dataset.k);animNext=true;renderAll();sheet.innerHTML=calHTML();bindCal();tick()});
   let sx=null;const box=sheet.querySelector('.sbox');
   box.addEventListener('touchstart',e=>{sx=e.touches[0].clientX},{passive:true});
   box.addEventListener('touchend',e=>{if(sx===null)return;const dx=e.changedTouches[0].clientX-sx;sx=null;if(Math.abs(dx)>60)(dx<0?$('#mNext'):$('#mPrev')).click()});
@@ -1305,9 +1389,14 @@ function renderSettings(){
   $('#set').innerHTML=
   '<h1>Настройки</h1>'+
   '<div class="grp"><h4>Группа</h4><div class="box"><div class="row"><span>Моя группа</span><select id="grpSel">'+data.groups.map(g=>'<option'+(g===settings.group?' selected':'')+'>'+esc(g)+'</option>').join('')+'</select></div></div></div>'+
-  '<div class="grp"><h4>Оформление</h4><div class="box"><div class="pad"><div class="seg" id="thSeg">'+
-    [['auto','Авто'],['dark','Тёмная'],['light','Светлая']].map(([v,t])=>'<button data-v="'+v+'" class="'+(settings.theme===v?'on':'')+'">'+t+'</button>').join('')+'</div></div>'+
-  '<div class="row" style="border-top:1px solid var(--line)"><span>Цвет акцента</span><div class="sw" id="swatches" style="gap:9px;flex-wrap:nowrap">'+ACCENTS.map(c=>'<button style="--c:'+c+';width:27px;height:27px" data-c="'+c+'" class="'+(settings.accent===c?'on':'')+'"></button>').join('')+'</div></div></div></div>'+
+  '<div class="grp"><h4>Оформление</h4><div class="box"><div class="pad"><div class="themes" id="thSeg">'+
+    [['auto','Авто','linear-gradient(135deg,#0a0a0b 50%,#f2f2f7 50%)','#2b2b30','#3a3a40','#4f5bff'],
+     ['dark','Тёмная','#0a0a0b','#1c1c1f','#2b2b30','#4f5bff'],
+     ['oled','OLED','#000','#161618','#232326','#4f5bff'],
+     ['light','Светлая','#f2f2f7','#fff','#dcdce3','#4f5bff'],
+     ['paper','Бумага','#f3ead6','#fbf6e8','#e2d6b8','#c9690a']].map(([v,t,b,c1,c2,ac])=>'<button data-v="'+v+'" class="'+(settings.theme===v?'on':'')+'"><span class="pv" style="--b:'+b+';--c1:'+c1+';--c2:'+c2+';--ac:'+ac+'"><i></i><i></i><i></i></span>'+t+'</button>').join('')+'</div></div>'+
+  '<div class="row" style="border-top:1px solid var(--line)"><span>Цвет акцента</span><div class="sw" id="swatches" style="gap:9px;flex-wrap:nowrap">'+ACCENTS.map(c=>'<button style="--c:'+c+';width:27px;height:27px" data-c="'+c+'" class="'+(settings.accent===c?'on':'')+'"></button>').join('')+'</div></div>'+
+  '<div class="row" style="border-top:1px solid var(--line)"><span>Размер текста</span><div class="seg fs" id="fsSeg" style="min-width:150px">'+[[0,13],[1,16],[2,19]].map(([v,s])=>'<button data-v="'+v+'" class="'+(settings.fs===v?'on':'')+'" style="font-size:'+s+'px">A</button>').join('')+'</div></div></div></div>'+
   '<div class="grp"><h4>Отображение</h4><div class="box">'+
     '<div class="row"><span>Преподаватели</span><button class="tog'+(settings.teachers?' on':'')+'" id="tgT"></button></div>'+
     '<div class="row"><span>Время окончания пары</span><button class="tog'+(settings.endTime?' on':'')+'" id="tgE"></button></div></div></div>'+
@@ -1326,6 +1415,7 @@ function renderSettings(){
   $('#set').scrollTop=sc;
   $('#grpSel').onchange=e=>{settings.group=e.target.value;saveSettings();buildIndex();renderAll();renderSettings();if(nf.active&&nfOK())nfSave({})};
   $('#thSeg').onclick=e=>{const b=e.target.closest('button');if(!b)return;settings.theme=b.dataset.v;saveSettings();applyTheme();renderSettings()};
+  $('#fsSeg').onclick=e=>{const b=e.target.closest('button');if(!b)return;settings.fs=+b.dataset.v;saveSettings();applyTheme();renderSettings();renderAll(true)};
   $('#swatches').onclick=e=>{const b=e.target.closest('button');if(!b)return;settings.accent=b.dataset.c;saveSettings();applyTheme();renderSettings()};
   $('#tgT').onclick=()=>{settings.teachers=!settings.teachers;saveSettings();renderAll(true);renderSettings()};
   $('#tgE').onclick=()=>{settings.endTime=!settings.endTime;saveSettings();renderAll(true);renderSettings()};
@@ -1366,10 +1456,10 @@ function refreshView(){
   else if(view==='set')renderSettings();
 }
 function show(v){
-  view=v;
+  const prevView=view;view=v;
   VIEWS.forEach(x=>{$('#v-'+x).classList.toggle('on',x===v);$('#tab-'+x).classList.toggle('on',x===v)});
   if(v==='set')renderSettings();
-  else if(v==='sch')renderAll(true);
+  else if(v==='sch'){animNext=prevView!=='sch';renderAll(true)}
   else if(v==='wk'){wkStart=monday(sel);renderWeek();$('#wkBody').scrollTop=0}
   else if(v==='sj')renderSubjects();
   closeSheet();
