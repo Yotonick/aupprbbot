@@ -1,0 +1,22 @@
+name: Build schedule.json
+on:
+  push:
+    paths: ['schedule.xlsx', 'tools/**']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm ci --prefix tools
+      - run: node tools/build-schedule.js
+      - name: Commit schedule.json
+        run: |
+          git config user.name "schedule-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add schedule.json
+          git diff --cached --quiet || (git commit -m "Update schedule.json" && git push)
