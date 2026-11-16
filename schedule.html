@@ -1138,8 +1138,10 @@ function openNotices(list,chg){
   sheet.querySelectorAll('.ntc a').forEach(a=>a.onclick=e=>{if(inTg&&tg.openLink){e.preventDefault();try{tg.openLink(a.href)}catch(_){window.open(a.href,'_blank')}}});
   sheet.querySelectorAll('.ntc .wr[data-k]').forEach(b=>b.onclick=()=>{closeSheet();jump(b.dataset.k)});
   const seen=store.get('sch.seenN')||[];
-  list.concat(chg).forEach(x=>{const id=x.xid||x.id;if(!seen.includes(id))seen.push(id)});
+  const ids=list.concat(chg).map(x=>x.xid||x.id);
+  ids.forEach(id=>{if(!seen.includes(id))seen.push(id)});
   store.set('sch.seenN',seen.slice(-300));
+  stPost('/api/seen',{ids});
   try{tg&&tg.HapticFeedback&&tg.HapticFeedback.notificationOccurred('warning')}catch(e){}
 }
 function maybeNotice(){
@@ -1454,6 +1456,21 @@ function maybeInvite(){
   setTimeout(hideA2,12000);
 }
 
+/* ---------- статистика посещений (Cloudflare Worker, папка worker/) ---------- */
+/* Адрес воркера вида https://schedule-stats.ИМЯ.workers.dev (без / на конце). Пусто — статистика выключена. */
+const STATS_API='https://schedule-stats.yotonick.workers.dev';
+const devId=(()=>{let d=store.get('sch.dev');if(!d){d=Math.random().toString(36).slice(2)+Date.now().toString(36);store.set('sch.dev',d)}return d})();
+let lastPing=0;
+function stPost(path,body){
+  if(!STATS_API)return;
+  try{
+    const src=inTg?'tg':isStandalone()?'pwa':'browser';
+    fetch(STATS_API+path,{method:'POST',headers:{'content-type':'text/plain'},keepalive:true,
+      body:JSON.stringify(Object.assign({initData:(inTg&&tg.initData)||'',device:devId,group:settings.group||'',platform:inTg?tg.platform:'',src,ver:APP_VER},body))}).catch(()=>{});
+  }catch(e){}
+}
+function stVisit(ping){lastPing=Date.now();stPost('/api/visit',ping?{ping:1}:{})}
+
 /* ---------- уведомления (через бота и Cloudflare Worker) ---------- */
 /* Адрес воркера вида https://schedule-bot.ИМЯ.workers.dev (без / на конце). Пусто — раздел скрыт. */
 const NOTIFY_API='';
@@ -1543,7 +1560,7 @@ function renderSettings(){
     '<p class="info" style="margin-top:12px">Расписание подгружается с сервера автоматически при каждом открытии. Файл, загруженный вручную, подойдёт с той же структурой (то, что присылают методисты), хранится только на этом устройстве и заменится, как только на сервере появится новая версия.</p></div>'+
   '<div class="credit">Dev: <a href="https://t.me/yotonick" id="credit">@yotonick</a> · v'+APP_VER+'</div>';
   $('#set').scrollTop=sc;
-  $('#grpSel').onchange=e=>{settings.group=e.target.value;saveSettings();buildIndex();renderAll();renderSettings();if(nf.active&&nfOK())nfSave({})};
+  $('#grpSel').onchange=e=>{settings.group=e.target.value;saveSettings();buildIndex();renderAll();renderSettings();stVisit(true);if(nf.active&&nfOK())nfSave({})};
   $('#thSeg').onclick=e=>{const b=e.target.closest('button');if(!b)return;settings.theme=b.dataset.v;saveSettings();applyTheme();renderSettings()};
   $('#fsSeg').onclick=e=>{const b=e.target.closest('button');if(!b)return;settings.fs=+b.dataset.v;saveSettings();applyTheme();renderSettings();renderAll(true)};
   $('#swatches').onclick=e=>{const b=e.target.closest('button');if(!b)return;settings.accent=b.dataset.c;saveSettings();applyTheme();renderSettings()};
@@ -1608,9 +1625,10 @@ function minuteTick(){
   }else if(view==='sch'&&key(sel)===tk&&!ov.classList.contains('on'))renderPanels(true);
   renderNext();renderAnn();
   if(!document.hidden&&Date.now()-lastN>3*60*1000)loadNotices();
+  if(!document.hidden&&Date.now()-lastPing>55*1000)stVisit(true);
 }
 setInterval(minuteTick,30000);
-document.addEventListener('visibilitychange',()=>{if(!document.hidden){minuteTick();maybeSync();if(Date.now()-lastN>30*1000)loadNotices()}});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){minuteTick();maybeSync();if(Date.now()-lastN>30*1000)loadNotices();if(Date.now()-lastPing>20*1000)stVisit(true)}});
 
 /* ---------- первый запуск: выбор группы + обучение ---------- */
 const LOGO=($('#splash svg')||{outerHTML:''}).outerHTML;
@@ -1704,6 +1722,7 @@ function boot(){
   hsDetect(()=>{if(view==='set')renderSettings();setTimeout(maybeInvite,2500)});
   maybeOnboard();
   setTimeout(maybeNotice,1600);
+  stVisit(false);
   nfLoad();
 }
 try{if(tg){tg.ready();tg.expand();tg.disableVerticalSwipes&&tg.disableVerticalSwipes()}}catch(e){}

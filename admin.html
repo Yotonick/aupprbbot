@@ -103,6 +103,38 @@ h3{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.06
 .toast.on{opacity:1;transform:none}
 .toast.err{background:var(--bad);color:#fff}
 details summary{cursor:pointer;font-weight:700;color:var(--accent);font-size:14px;margin:4px 0 8px}
+/* посетители */
+.tabs{grid-template-columns:1fr 1fr 1fr}
+.tabs button{padding:10px 4px;font-size:14px}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 8px;text-align:center}
+.tile b{display:block;font-size:24px;font-weight:800;letter-spacing:-.02em}
+.tile span{font-size:11.5px;color:var(--muted);font-weight:700}
+.tile.on b{color:var(--ok)}
+.chart{display:flex;align-items:flex-end;gap:4px;height:110px;padding:8px 2px 0}
+.chart .c{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:4px;min-width:0}
+.chart .c i{display:block;width:100%;max-width:26px;border-radius:6px 6px 3px 3px;background:var(--accent);min-height:3px}
+.chart .c.td i{background:var(--ok)}
+.chart .c em{font-style:normal;font-size:10px;color:var(--muted);font-weight:700}
+.chart .c small{font-size:10.5px;font-weight:800}
+.vf{display:flex;gap:8px;margin:4px 0 10px}
+.vf input{margin:0;flex:1.4}.vf select{margin:0;flex:1;width:auto}
+.u{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:10px 12px;margin-bottom:7px}
+.av{flex:none;width:42px;height:42px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:16px;color:#fff;overflow:hidden;position:relative}
+.av img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
+.av.on::after{content:"";position:absolute;right:0;bottom:0;width:12px;height:12px;border-radius:50%;background:var(--ok);border:2px solid var(--card)}
+.u .ui{flex:1;min-width:0}
+.u .ui b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.u .ui span{display:block;font-size:12.5px;color:var(--muted);font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.u .ut{flex:none;text-align:right;font-size:12.5px;font-weight:700;color:var(--muted)}
+.u .ut.on{color:var(--ok)}
+.u .ut small{display:block;font-weight:600;margin-top:2px}
+.seen{display:inline-flex;align-items:center;gap:4px;font-size:13px;font-weight:800;color:var(--accent);background:rgba(var(--accent-rgb),.12);border-radius:10px;padding:5px 10px;margin-top:8px}
+.hd{font-size:13px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:16px 2px 6px}
+.sr{display:flex;justify-content:space-between;gap:10px;padding:9px 12px;background:var(--card2);border-radius:12px;margin-bottom:5px;font-size:14px;font-weight:600}
+.sr span:last-child{color:var(--muted);text-align:right}
+.ph{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.ph .av{width:56px;height:56px;font-size:20px}
 </style>
 </head>
 <body>
@@ -110,7 +142,7 @@ details summary{cursor:pointer;font-weight:700;color:var(--accent);font-size:14p
   <h1>Админка</h1>
   <div class="sub">Объявления и изменения пар · <a href="schedule.html" target="_blank" rel="noopener">открыть расписание</a></div>
   <section class="card" id="conn"></section>
-  <div class="tabs" id="tabs"><button data-t="ann" class="on">Объявления</button><button data-t="chg">Изменения пар</button></div>
+  <div class="tabs" id="tabs"><button data-t="ann" class="on">Объявления</button><button data-t="chg">Изменения пар</button><button data-t="vis">Посетители</button></div>
   <section id="body"></section>
 </main>
 <div class="pub" id="pub"><div class="in"><div class="tx" id="pubTx"></div><button class="btn s" id="pubUndo">Сбросить</button><button class="btn p" id="pubBtn">Опубликовать</button></div></div>
@@ -214,8 +246,8 @@ async function connect(){
     store.set('adm.cfg',cfg);
     await loadDoc();
     conn='ok';connMsg=cfg.owner+'/'+cfg.repo+' · '+cfg.branch;connOpen=false;
-  }catch(e){conn='err';connMsg=e.message||String(e);connOpen=true}
-  render();
+  }catch(e){conn='err';connMsg=e.message||String(e);connOpen=true;render();await loadPublic();return}
+  render();loadStats(true);
 }
 async function loadDoc(){
   const r=await gh(repoPath()+'/contents/'+FILE+'?ref='+encodeURIComponent(cfg.branch)+'&t='+Date.now());
@@ -230,6 +262,7 @@ async function loadDoc(){
 }
 async function loadPublic(){
   try{const r=await fetch(FILE+'?t='+Date.now(),{cache:'no-store'});if(r.ok&&conn!=='ok'){doc=norm(await r.json());render()}}catch(e){}
+  loadStats(true);
 }
 function markDirty(msg){
   dirty=true;log.push(msg);
@@ -250,6 +283,7 @@ async function publish(){
     sha=r.j&&r.j.content&&r.j.content.sha||sha;
     dirty=false;log=[];store.del('adm.draft');
     toast('Опубликовано ✓ У всех появится через 1–2 минуты');
+    setTimeout(()=>loadStats(true),500);
   }catch(e){toast(e.message||String(e),true)}
   busy=false;render();
 }
@@ -278,7 +312,7 @@ function slots(){
 }
 
 /* ---------- рендер ---------- */
-function render(){renderConn();renderTabs();if(tab==='ann')renderAnn();else renderChg();renderPub()}
+function render(){renderConn();renderTabs();if(tab==='ann')renderAnn();else if(tab==='chg')renderChg();else renderVis();renderPub()}
 function renderConn(){
   const el=$('#conn');
   if(conn==='ok'&&!connOpen){
@@ -309,7 +343,7 @@ function renderConn(){
   const cl=$('#cClose');if(cl)cl.onclick=()=>{connOpen=false;renderConn()};
 }
 function renderTabs(){[...$('#tabs').children].forEach(b=>b.classList.toggle('on',b.dataset.t===tab))}
-$('#tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;tab=b.dataset.t;store.set('adm.tab',tab);render()};
+$('#tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;tab=b.dataset.t;store.set('adm.tab',tab);render();loadStats()};
 const canEdit=()=>conn==='ok';
 const lockNote=()=>canEdit()?'':'<div class="card sm">🔒 Подключите GitHub выше, чтобы добавлять и менять записи. Сейчас показано то, что видят студенты.</div>';
 
@@ -328,12 +362,13 @@ function renderAnn(){
       const [st,cls]=nStatus(n);
       return '<div class="it'+(cls==='off'?' past':'')+'"><div class="h"><span class="st '+cls+'">'+st+'</span><span class="g">'+esc(gTxt(n.g))+'</span></div>'+
         (n.title?'<b class="t">'+esc(n.title)+'</b>':'')+(n.text?'<p>'+esc(n.text.length>400?n.text.slice(0,400)+'…':n.text).replace(/\n/g,'<br>')+'</p>':'')+
-        '<div class="meta">'+(n.from?'с '+fd(n.from):'сразу')+(n.until?' по '+fd(n.until):' · без срока')+'</div>'+
+        '<div class="meta">'+(n.from?'с '+fd(n.from):'сразу')+(n.until?' по '+fd(n.until):' · без срока')+'</div>'+seenBadge(n.id,n.g)+
         (canEdit()?'<div class="acts"><button class="btn s" data-ed="'+esc(n.id)+'">Изменить</button><button class="btn d" data-del="'+esc(n.id)+'">Удалить</button></div>':'')+'</div>';
     }).join(''):'<div class="none">Объявлений пока нет.</div>')+
     (canEdit()&&list.some(n=>nStatus(n)[1]==='off')?'<button class="btn s w" id="nClean" style="margin-top:6px">Удалить истёкшие</button>':'');
   const nn=$('#nNew');if(nn)nn.onclick=()=>noticeForm(null);
   const cl=$('#nClean');if(cl)cl.onclick=()=>{const k=doc.notices.length;doc.notices=doc.notices.filter(n=>nStatus(n)[1]!=='off');markDirty('удалены истёкшие объявления ('+(k-doc.notices.length)+')')};
+  bindSeen($('#body'));
   $('#body').querySelectorAll('[data-ed]').forEach(b=>b.onclick=()=>noticeForm(doc.notices.find(n=>n.id===b.dataset.ed)));
   $('#body').querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{
     const n=doc.notices.find(x=>x.id===b.dataset.del);if(!n||!confirm('Удалить объявление «'+(n.title||n.text.slice(0,40))+'»?'))return;
@@ -398,7 +433,7 @@ function renderChg(){
     const l=c.act==='add'?null:baseOf(c);
     const nm=c.act==='add'?(c.c?nameOf(c.c):c.name||'Занятие'):(l?nameOf(l.c):'⚠ пара не найдена в расписании');
     return '<div class="it'+(c.d<t?' past':'')+'"><div class="h"><span class="st '+c.act+'">'+ACT[c.act]+'</span><span class="g">'+fd(c.d)+' · '+esc(c.act==='add'?c.nt1:c.t1)+' · '+esc(gTxt(c.g))+'</span></div>'+
-      '<b class="t">'+esc(nm)+'</b><p>'+esc(describe(c))+'</p>'+
+      '<b class="t">'+esc(nm)+'</b><p>'+esc(describe(c))+'</p>'+seenBadge(c.id,c.g)+
       '<div class="acts"><button class="btn s" data-go="'+esc(c.id)+'">Открыть день</button>'+(canEdit()?'<button class="btn d" data-crm="'+esc(c.id)+'">Удалить</button>':'')+'</div></div>';
   }).join('');
 
@@ -411,6 +446,7 @@ function renderChg(){
     '<h3>Все изменения ('+all.length+')</h3>'+(list||'<div class="none">Изменений пока нет.</div>')+
     (canEdit()&&all.some(c=>c.d<t)?'<button class="btn s w" id="cClean">Удалить прошедшие</button>':'');
 
+  bindSeen(b);
   const sg=$('#cG');if(sg)sg.onchange=e=>{grp=e.target.value;store.set('adm.grp',grp);renderChg()};
   $('#cD').onchange=e=>{if(e.target.value){day=e.target.value;renderChg()}};
   $('#dP').onclick=()=>{day=key(addDays(fromKey(day),-1));renderChg()};
@@ -499,6 +535,142 @@ function changeForm(mode,l,c){
     closeModal();
     markDirty((mode==='cancel'?'отмена пары ':mode==='add'?'новая пара ':'изменение пары ')+fd(o.d)+' '+(o.t1||o.nt1));
   };
+}
+
+/* --- посетители (Cloudflare Worker, папка worker/) --- */
+/* Адрес воркера вписывается сюда после развёртывания; его можно поменять и на странице. */
+const STATS_API_DEFAULT='https://schedule-stats.yotonick.workers.dev';
+let st=Object.assign({url:STATS_API_DEFAULT,key:''},store.get('adm.st')||{});
+if(!st.url)st.url=STATS_API_DEFAULT;
+let ST={ov:null,views:new Map(),err:'',busy:false,setup:false,at:0},vq='',vg='';
+const stOK=()=>!!(st.url&&st.key);
+async function stGet(path){
+  const r=await fetch(st.url.replace(/\/+$/,'')+path,{headers:{authorization:'Bearer '+st.key},cache:'no-store'});
+  let j=null;try{j=await r.json()}catch(e){}
+  if(r.status===401)throw new Error('Неверный пароль статистики');
+  if(!r.ok||!j||!j.ok)throw new Error((j&&j.error)||('Сервер статистики: HTTP '+r.status));
+  return j;
+}
+async function loadStats(force){
+  if(!stOK()||ST.busy)return;
+  if(!force&&Date.now()-ST.at<15000)return;
+  ST.busy=true;
+  try{
+    const ids=doc.notices.map(n=>n.id).concat(doc.changes.map(c=>c.id)).slice(-100);
+    const [ov,vw]=await Promise.all([stGet('/api/admin/overview?days=14'),ids.length?stGet('/api/admin/views?ids='+encodeURIComponent(ids.join(','))):{views:[]}]);
+    ST.ov=ov;ST.views=new Map();vw.views.forEach(v=>{if(!ST.views.has(v.item_id))ST.views.set(v.item_id,[]);ST.views.get(v.item_id).push(v)});
+    ST.err='';ST.at=Date.now();
+  }catch(e){ST.err=e.message||String(e)}
+  ST.busy=false;render();
+}
+setInterval(()=>{if(!document.hidden&&tab==='vis')loadStats(true)},30000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)loadStats()});
+
+const hm=d=>pad(d.getHours())+':'+pad(d.getMinutes());
+const isOn=u=>Date.now()-u.last_seen<150000;
+function ago(ms){
+  const d=Date.now()-ms;
+  if(d<150000)return 'сейчас';
+  const m=Math.round(d/60000);if(m<60)return m+' мин назад';
+  const dt=new Date(ms);if(m<360)return Math.floor(m/60)+' ч назад';
+  const k=key(dt);
+  return(k===today()?'сегодня':k===key(addDays(new Date(),-1))?'вчера':dt.getDate()+' '+MON[dt.getMonth()])+' в '+hm(dt);
+}
+const uName=u=>[u.first_name,u.last_name].filter(Boolean).join(' ')||(u.username?'@'+u.username:'id '+u.id);
+const PLAT={android:'Android',ios:'iPhone',tdesktop:'Telegram Desktop',macos:'macOS',weba:'Telegram Web',webk:'Telegram Web',web:'Telegram Web',unigram:'Unigram'};
+const plat=p=>PLAT[p]||p||'—';
+const AVC=['#4f5bff','#2d9cff','#19c37d','#ff9f1c','#ff5a7a','#b069ff','#14b8a6'];
+function avatar(u){
+  const ini=((u.first_name||'?')[0]+((u.last_name||'')[0]||'')).toUpperCase();
+  return '<span class="av'+(isOn(u)?' on':'')+'" style="background:'+AVC[Math.abs(u.id)%AVC.length]+'">'+esc(ini)+
+    (u.photo&&/^https:\/\//.test(u.photo)?'<img src="'+esc(u.photo)+'" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.remove()">':'')+'</span>';
+}
+function dur(a,b){const m=Math.round((b-a)/60000);return m<1?'меньше минуты':m<60?m+' мин':Math.floor(m/60)+' ч '+(m%60?m%60+' мин':'')}
+
+function stSetupHTML(){
+  return '<div class="card"><h2>Статистика посещений</h2>'+(ST.err?'<div class="err">'+esc(ST.err)+'</div>':'')+
+    '<label>Адрес сервера статистики<input id="sUrl" autocomplete="off" placeholder="https://schedule-stats.…workers.dev" value="'+esc(st.url)+'"></label>'+
+    '<label>Пароль статистики<input id="sKey" type="password" autocomplete="off" value="'+esc(st.key)+'"></label>'+
+    '<div class="acts" style="margin:0"><button class="btn p" id="sSave">Подключить</button>'+(st.key?'<button class="btn d" id="sOut">Забыть пароль</button>':'')+(stOK()&&!ST.err?'<button class="btn s" id="sClose">Свернуть</button>':'')+'</div>'+
+    '<div class="sm" style="margin-top:10px">Пароль — тот, что вы задали серверу как ADMIN_KEY. Хранится только в этом браузере.</div></div>';
+}
+function bindSetup(){
+  const s=$('#sSave');if(!s)return;
+  s.onclick=()=>{st.url=$('#sUrl').value.trim().replace(/\/+$/,'');st.key=$('#sKey').value;store.set('adm.st',st);if(!stOK()){toast('Заполните адрес и пароль',true);return}ST.setup=false;ST.err='';ST.at=0;loadStats(true)};
+  const o=$('#sOut');if(o)o.onclick=()=>{st.key='';store.set('adm.st',st);ST.ov=null;render()};
+  const c=$('#sClose');if(c)c.onclick=()=>{ST.setup=false;render()};
+}
+function renderVis(){
+  const b=$('#body');
+  if(!stOK()||ST.setup||(ST.err&&!ST.ov)){b.innerHTML=stSetupHTML();bindSetup();return}
+  if(!ST.ov){b.innerHTML='<div class="none">Загружаем статистику…</div>';loadStats();return}
+  const ov=ST.ov,users=ov.users,t=ov.today;
+  const dayAgo=Date.now()-864e5*7;
+  const todayU=(ov.daily.find(d=>d.day===t)||{}).users||0;
+  const tiles=[[users.filter(isOn).length,'сейчас','on'],[todayU,'сегодня',''],[users.filter(u=>u.last_seen>=dayAgo).length,'за 7 дней',''],[users.length,'всего','']];
+  const days=[];for(let i=13;i>=0;i--)days.push(key(addDays(fromKey(t),-i)));
+  const dm=new Map(ov.daily.map(d=>[d.day,d])),am=new Map(ov.anon.map(d=>[d.day,d.devices]));
+  const mx=Math.max(1,...days.map(d=>(dm.get(d)||{}).users||0));
+  const chart='<div class="card"><div class="sm" style="font-weight:800">Люди по дням (Telegram)</div><div class="chart">'+days.map(d=>{
+    const v=(dm.get(d)||{}).users||0,an=am.get(d)||0,dt=fromKey(d);
+    return '<div class="c'+(d===t?' td':'')+'" title="'+fd(d)+': '+v+' чел., заходов '+((dm.get(d)||{}).visits||0)+(an?', без Telegram: '+an:'')+'"><small>'+(v||'')+'</small><i style="height:'+Math.round(v/mx*76)+'px"></i><em>'+dt.getDate()+'</em></div>';
+  }).join('')+'</div>'+(am.get(t)?'<div class="sm" style="margin-top:6px">Сегодня без Telegram (в браузере): '+am.get(t)+' устр.</div>':'')+'</div>';
+  const gs=[...new Set(users.map(u=>u.grp).filter(Boolean))].sort();
+  const q=vq.trim().toLowerCase();
+  const list=users.filter(u=>(!vg||u.grp===vg)&&(!q||(uName(u)+' '+(u.username||'')).toLowerCase().includes(q)));
+  b.innerHTML='<div class="tiles">'+tiles.map(([v,l,c])=>'<div class="tile '+c+'"><b>'+v+'</b><span>'+l+'</span></div>').join('')+'</div>'+chart+
+    '<div class="vf"><input id="vQ" type="search" placeholder="Поиск по имени" value="'+esc(vq)+'">'+(gs.length>1?'<select id="vG"><option value="">Все группы</option>'+gs.map(g=>'<option'+(g===vg?' selected':'')+'>'+esc(g)+'</option>').join('')+'</select>':'')+'</div>'+
+    (list.length?list.map(u=>'<button class="u" data-u="'+u.id+'">'+avatar(u)+'<span class="ui"><b>'+esc(uName(u))+'</b><span>'+esc([u.username?'@'+u.username:'',u.grp,plat(u.platform)].filter(Boolean).join(' · '))+'</span></span>'+
+      '<span class="ut'+(isOn(u)?' on':'')+'">'+(isOn(u)?'🟢 сейчас':esc(ago(u.last_seen)))+'<small>'+u.visits+' '+(u.visits%10===1&&u.visits%100!==11?'заход':u.visits%10>=2&&u.visits%10<=4&&(u.visits%100<12||u.visits%100>14)?'захода':'заходов')+'</small></span></button>').join('')
+      :'<div class="none">'+(users.length?'Никого не найдено.':'Пока никто не заходил через Telegram. Данные появятся после первого открытия приложения.')+'</div>')+
+    '<div class="acts" style="margin-top:14px"><button class="btn s" id="vRef">Обновить</button><button class="btn s" id="vSet">Настройки статистики</button></div>'+
+    '<div class="sm" style="margin-top:8px">Обновлено '+hm(new Date(ST.at))+(ST.err?' · <span style="color:var(--bad)">'+esc(ST.err)+'</span>':'')+'. «Сейчас» — приложение открыто в последние 2–3 минуты.</div>';
+  const qi=$('#vQ');qi.oninput=e=>{vq=e.target.value;const p=qi.selectionStart;renderVis();const n=$('#vQ');n.focus();n.setSelectionRange(p,p)};
+  const g=$('#vG');if(g)g.onchange=e=>{vg=e.target.value;renderVis()};
+  $('#vRef').onclick=()=>loadStats(true);
+  $('#vSet').onclick=()=>{ST.setup=true;renderVis()};
+  b.querySelectorAll('[data-u]').forEach(x=>x.onclick=()=>userModal(+x.dataset.u));
+}
+function itemTitle(id){
+  const n=doc.notices.find(x=>x.id===id);if(n)return '📢 '+(n.title||n.text.slice(0,50));
+  const c=doc.changes.find(x=>x.id===id);if(c)return '✏️ '+fd(c.d)+' '+(c.t1||c.nt1)+' — '+ACT[c.act].toLowerCase();
+  return null;
+}
+async function userModal(id){
+  const u0=ST.ov&&ST.ov.users.find(u=>u.id===id);if(!u0)return;
+  modal('<div class="ph">'+avatar(u0)+'<div><h2>'+esc(uName(u0))+'</h2><div class="sm">Загружаем историю…</div></div></div><div class="mact"><button class="btn s" id="mCancel">Закрыть</button></div>');
+  let j;try{j=await stGet('/api/admin/user?id='+id)}catch(e){toast(e.message,true);return}
+  const u=j.user||u0;
+  const byDay=new Map();j.sessions.forEach(s=>{const k=key(new Date(s.start));if(!byDay.has(k))byDay.set(k,[]);byDay.get(k).push(s)});
+  const vis=j.views.map(v=>[itemTitle(v.item_id),v.ts]).filter(x=>x[0]);
+  modal('<div class="ph">'+avatar(u)+'<div><h2>'+esc(uName(u))+'</h2><div class="sm">'+esc([u.username?'@'+u.username:'',u.grp,plat(u.platform)].filter(Boolean).join(' · '))+'</div></div></div>'+
+    '<div class="sr"><span>Последний раз</span><span>'+(isOn(u)?'🟢 сейчас в приложении':esc(ago(u.last_seen)))+'</span></div>'+
+    '<div class="sr"><span>Первый заход</span><span>'+esc(fd(key(new Date(u.first_seen))))+' в '+hm(new Date(u.first_seen))+'</span></div>'+
+    '<div class="sr"><span>Всего заходов</span><span>'+u.visits+'</span></div>'+
+    (u.username?'<a class="btn s w" style="margin-top:8px;text-decoration:none" href="https://t.me/'+esc(u.username)+'" target="_blank" rel="noopener">Написать в Telegram</a>':'')+
+    (vis.length?'<div class="hd">Видел(а)</div>'+vis.slice(0,30).map(([t,ts])=>'<div class="sr"><span>'+esc(t)+'</span><span>'+esc(ago(ts))+'</span></div>').join(''):'')+
+    '<div class="hd">История заходов</div>'+([...byDay].map(([k,ss])=>'<div class="sm" style="margin:10px 2px 4px;font-weight:800">'+fd(k)+'</div>'+ss.map(s=>'<div class="sr"><span>'+hm(new Date(s.start))+(s.end-s.start>=60000?' – '+hm(new Date(s.end)):'')+'</span><span>'+dur(s.start,s.end)+' · '+esc(plat(s.platform))+'</span></div>').join('')).join('')||'<div class="none">Нет данных</div>')+
+    '<div class="mact" style="margin-top:14px"><button class="btn s" id="mCancel">Закрыть</button></div>');
+}
+/* «видели N из M» под объявлением или изменением */
+function audience(g){return ST.ov?ST.ov.users.filter(u=>!g||!g.length||g.includes(u.grp)):[]}
+function seenBadge(id,g){
+  if(!stOK()||!ST.ov)return '';
+  const v=ST.views.get(id)||[],aud=audience(g);
+  return '<button class="seen" data-seen="'+esc(id)+'">👁 видели '+v.length+(aud.length?' из '+aud.length:'')+'</button>';
+}
+function bindSeen(root){root.querySelectorAll('[data-seen]').forEach(x=>x.onclick=()=>seenModal(x.dataset.seen))}
+function seenModal(id){
+  const it=doc.notices.find(x=>x.id===id)||doc.changes.find(x=>x.id===id);if(!it)return;
+  const v=ST.views.get(id)||[],um=new Map(ST.ov.users.map(u=>[u.id,u]));
+  const saw=new Set(v.map(x=>x.user_id));
+  const not=audience(it.g).filter(u=>!saw.has(u.id));
+  const row=(u,right)=>'<button class="u" data-u="'+u.id+'">'+avatar(u)+'<span class="ui"><b>'+esc(uName(u))+'</b><span>'+esc(u.grp||'')+'</span></span><span class="ut">'+right+'</span></button>';
+  modal('<h2>'+esc(itemTitle(id)||'')+'</h2><div class="lsn">Видели '+v.length+(audience(it.g).length?' из '+audience(it.g).length:'')+'</div>'+
+    (v.length?'<div class="hd">Видели</div>'+v.slice().sort((a,b)=>b.ts-a.ts).map(x=>{const u=um.get(x.user_id)||{id:x.user_id,first_name:'id '+x.user_id};return row(u,esc(ago(x.ts)))}).join(''):'')+
+    (not.length?'<div class="hd">Ещё не видели</div>'+not.map(u=>row(u,'был(а) '+esc(ago(u.last_seen)))).join(''):'')+
+    '<div class="sm" style="margin-top:10px">Учитываются только заходы через Telegram.</div><div class="mact" style="margin-top:12px"><button class="btn s" id="mCancel">Закрыть</button></div>');
+  $('#mbox').querySelectorAll('[data-u]').forEach(x=>x.onclick=()=>userModal(+x.dataset.u));
 }
 
 function renderPub(){
