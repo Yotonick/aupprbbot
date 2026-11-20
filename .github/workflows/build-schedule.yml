@@ -5,6 +5,10 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+# запуски идут строго по очереди, чтобы два обновления не мешали друг другу
+concurrency:
+  group: build-schedule-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -18,5 +22,12 @@ jobs:
         run: |
           git config user.name "schedule-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add schedule.json
-          git diff --cached --quiet || (git commit -m "Update schedule.json" && git push)
+          git add schedule.json schedule-full.json
+          if git diff --cached --quiet; then echo "Без изменений"; exit 0; fi
+          git commit -m "Update schedule.json"
+          # пока шла сборка, могли опубликовать изменения из админки — подтягиваем их перед отправкой
+          for i in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push && exit 0
+            sleep 5
+          done
+          exit 1

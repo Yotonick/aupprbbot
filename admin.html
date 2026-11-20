@@ -354,19 +354,32 @@ function nStatus(n){
   if(n.from&&n.from>t)return['С '+fd(n.from),'plan',1];
   return['Показывается','on',0];
 }
+/* выключатели функций приложения (хранятся в notices.json → flags) */
+function flagsHTML(){
+  const on=!!(doc.flags&&doc.flags.cal);
+  return '<div class="it"><div class="h"><span class="st '+(on?'on':'plan')+'">'+(on?'Включено для всех':'Только тест')+'</span></div>'+
+    '<b class="t">📅 Подписка на календарь</b><p>'+(on?'Кнопку «Добавить в календарь» видят все студенты.':'Кнопку видите только вы (@yotonick в Telegram). Проверьте подписку на своём телефоне, потом включите для всех.')+'</p>'+
+    (canEdit()?'<div class="acts"><button class="btn '+(on?'d':'p')+'" id="flCal">'+(on?'Выключить для всех':'Включить для всех')+'</button></div>':'')+'</div>';
+}
 function renderAnn(){
   const list=doc.notices.slice().sort((a,b)=>nStatus(a)[2]-nStatus(b)[2]||(b.from||'').localeCompare(a.from||''));
-  $('#body').innerHTML=lockNote()+
+  $('#body').innerHTML=lockNote()+flagsHTML()+
     (canEdit()?'<button class="btn p w" id="nNew" style="margin-bottom:14px">＋ Новое объявление</button>':'')+
     (list.length?list.map(n=>{
       const [st,cls]=nStatus(n);
       return '<div class="it'+(cls==='off'?' past':'')+'"><div class="h"><span class="st '+cls+'">'+st+'</span><span class="g">'+esc(gTxt(n.g))+'</span></div>'+
         (n.title?'<b class="t">'+esc(n.title)+'</b>':'')+(n.text?'<p>'+esc(n.text.length>400?n.text.slice(0,400)+'…':n.text).replace(/\n/g,'<br>')+'</p>':'')+
-        '<div class="meta">'+(n.from?'с '+fd(n.from):'сразу')+(n.until?' по '+fd(n.until):' · без срока')+'</div>'+seenBadge(n.id,n.g)+
+        '<div class="meta">'+(n.from?'с '+fd(n.from):'сразу')+(n.until?' по '+fd(n.until):' · без срока')+(n.btn==='cal'?' · 📅 с кнопкой календаря':'')+'</div>'+seenBadge(n.id,n.g)+
         (canEdit()?'<div class="acts"><button class="btn s" data-ed="'+esc(n.id)+'">Изменить</button><button class="btn d" data-del="'+esc(n.id)+'">Удалить</button></div>':'')+'</div>';
     }).join(''):'<div class="none">Объявлений пока нет.</div>')+
     (canEdit()&&list.some(n=>nStatus(n)[1]==='off')?'<button class="btn s w" id="nClean" style="margin-top:6px">Удалить истёкшие</button>':'');
   const nn=$('#nNew');if(nn)nn.onclick=()=>noticeForm(null);
+  const fc=$('#flCal');if(fc)fc.onclick=()=>{
+    const on=!(doc.flags&&doc.flags.cal);
+    if(on&&!confirm('Показать кнопку «Добавить в календарь» всем студентам?'))return;
+    doc.flags=Object.assign({},doc.flags||{},{cal:on});
+    markDirty(on?'календарь включён для всех':'календарь выключен');
+  };
   const cl=$('#nClean');if(cl)cl.onclick=()=>{const k=doc.notices.length;doc.notices=doc.notices.filter(n=>nStatus(n)[1]!=='off');markDirty('удалены истёкшие объявления ('+(k-doc.notices.length)+')')};
   bindSeen($('#body'));
   $('#body').querySelectorAll('[data-ed]').forEach(b=>b.onclick=()=>noticeForm(doc.notices.find(n=>n.id===b.dataset.ed)));
@@ -391,6 +404,7 @@ function noticeForm(n){
     '<label>Текст<textarea id="fX" rows="5" placeholder="Что случилось, что нужно сделать. Ссылки станут кликабельными.">'+esc(n?n.text:'')+'</textarea></label>'+
     '<div class="two"><label>Показывать с<input type="date" id="fF" value="'+esc(n?n.from||'':t)+'"></label><label>по (включительно)<input type="date" id="fU" value="'+esc(n?n.until||'':key(addDays(new Date(),7)))+'"></label></div>'+
     groupsHTML(n&&n.g,true)+
+    '<label class="chk" style="margin-top:10px"><input type="checkbox" id="fCal"'+(n&&n.btn==='cal'?' checked':'')+'> Кнопка «📅 Добавить в календарь» в объявлении</label>'+
     (n?'<label class="chk"><input type="checkbox" id="fR" checked> Показать окно снова тем, кто уже видел</label>':'')+
     '<div class="mact"><button class="btn s" id="mCancel">Отмена</button><button class="btn p" id="mSave">Сохранить</button></div>');
   $('#mSave').onclick=()=>{
@@ -401,6 +415,7 @@ function noticeForm(n){
     if(g&&!g.length){toast('Выберите хотя бы одну группу',true);return}
     if(g&&g.length===groups().length)g=[];
     const o={id:n&&!($('#fR')&&$('#fR').checked)?n.id:uid('n'),title,text,from:from||'',until:until||'',g:g||[]};
+    if($('#fCal').checked)o.btn='cal';
     if(n)doc.notices[doc.notices.indexOf(n)]=o;else doc.notices.push(o);
     closeModal();markDirty((n?'изменено':'новое')+' объявление «'+(title||text.slice(0,30))+'»');
   };

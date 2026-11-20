@@ -394,6 +394,15 @@ nav svg{width:26px;height:26px}
 .ntc .nt .tx{font-size:16px;line-height:1.45;font-weight:500;overflow-wrap:anywhere}
 .ntc .nt .tx a{color:var(--accent);font-weight:700}
 .ntc .nt .sm{margin-top:8px}
+/* ---------- v2.3: календарь ---------- */
+.calw{background:var(--card);border-radius:18px;padding:12px 12px 6px;margin:6px 0 4px}
+.calw .cwh{font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:0 2px 8px}
+.calw .cwr{display:flex;gap:10px;align-items:stretch;margin-bottom:8px}
+.calw .cwr i{width:4px;border-radius:2px;background:var(--accent);flex:none}
+.calw .cwr b{display:block;font-size:15px;font-weight:700;line-height:1.25}
+.calw .cwr span{display:block;color:var(--muted);font-size:13px;font-weight:600;margin-top:1px}
+.sj .seg button{font-size:13.5px;white-space:nowrap;padding:9px 4px}
+.sj .row>span:first-child{white-space:normal;min-width:0}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -785,7 +794,7 @@ nav svg{width:26px;height:26px}
 const $=(s,r=document)=>r.querySelector(s);
 const tg=window.Telegram&&window.Telegram.WebApp;
 const inTg=!!(tg&&tg.platform&&tg.platform!=='unknown');
-const APP_VER='2.1';
+const APP_VER='2.3';
 const XLSX_URL='schedule.xlsx';
 const NOTICES_URL='notices.json';
 const MONTHS=['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
@@ -1128,7 +1137,7 @@ function openNotices(list,chg){
   if(!list.length&&!chg.length)return;
   const fd=k=>{const d=fromKey(k);return d.getDate()+' '+MONTHS[d.getMonth()]};
   let h='<div class="sbox sj ntc">';
-  if(list.length)h+='<div class="nth">📢 '+(list.length>1?'Объявления':'Объявление')+'</div>'+list.map(n=>'<div class="nt">'+(n.title?'<h2>'+esc(n.title)+'</h2>':'')+(n.text?'<div class="tx">'+fmtText(n.text)+'</div>':'')+(n.until?'<div class="sm">Актуально до '+fd(n.until)+'</div>':'')+'</div>').join('');
+  if(list.length)h+='<div class="nth">📢 '+(list.length>1?'Объявления':'Объявление')+'</div>'+list.map(n=>'<div class="nt">'+(n.title?'<h2>'+esc(n.title)+'</h2>':'')+(n.text?'<div class="tx">'+fmtText(n.text)+'</div>':'')+(n.btn==='cal'&&calOn()?'<button class="btn p" data-cal="1" style="margin-top:12px">📅 Добавить в календарь</button>':'')+(n.until?'<div class="sm">Актуально до '+fd(n.until)+'</div>':'')+'</div>').join('');
   if(chg.length)h+='<div class="nth"'+(list.length?' style="margin-top:18px"':'')+'>✏️ Изменения в расписании</div>'+chg.map(l=>{
     const [label,cls]=typeInfo(l);
     return '<button class="wr '+cls+xCls(l)+'" data-k="'+l.d+'" style="opacity:1"><div class="bar"></div><div class="tm">'+l.t1+'<span>'+shortDate(fromKey(l.d))+'</span></div><div class="nmx"><b>'+esc(nameOf(l.c))+'</b><span><em class="xw">'+X_LABEL[l.x]+'</em>'+(l.xold?' · вместо «'+esc(l.xold)+'»':'')+(l.xot?' · была в '+l.xot:'')+(l.xnote?' · '+esc(l.xnote):'')+'</span></div></button>';
@@ -1137,6 +1146,7 @@ function openNotices(list,chg){
   $('#sheetOk').onclick=closeSheet;
   sheet.querySelectorAll('.ntc a').forEach(a=>a.onclick=e=>{if(inTg&&tg.openLink){e.preventDefault();try{tg.openLink(a.href)}catch(_){window.open(a.href,'_blank')}}});
   sheet.querySelectorAll('.ntc .wr[data-k]').forEach(b=>b.onclick=()=>{closeSheet();jump(b.dataset.k)});
+  sheet.querySelectorAll('.ntc [data-cal]').forEach(b=>b.onclick=()=>{closeSheet();setTimeout(openCalSheet,320)});
   const seen=store.get('sch.seenN')||[];
   const ids=list.concat(chg).map(x=>x.xid||x.id);
   ids.forEach(id=>{if(!seen.includes(id))seen.push(id)});
@@ -1521,6 +1531,96 @@ function nfBind(){
   const l=$('#nfLead');if(l)l.onchange=async e=>{await nfSave({lead:+e.target.value})};
 }
 
+/* ---------- подписка на календарь телефона (Cloudflare Worker, папка worker/) ---------- */
+/* Адрес воркера schedule-cal. Пусто — функция полностью выключена (кнопки пропадут). */
+const CAL_API='https://schedule-cal.yotonick.workers.dev';
+/* Пока в админке не включено «Календарь для всех», кнопку видят только эти аккаунты Telegram (для проверки). */
+const DEV_USERS=['yotonick'];
+try{if(new URLSearchParams(location.search).get('caltest')==='1')store.set('sch.calTest',1)}catch(e){}
+function isDev(){
+  try{const u=inTg&&tg.initDataUnsafe&&tg.initDataUnsafe.user;if(u&&DEV_USERS.includes(String(u.username||'').toLowerCase()))return true}catch(e){}
+  return !!store.get('sch.calTest');
+}
+const calOn=()=>!!CAL_API&&!!data&&!!((notices.flags&&notices.flags.cal)||isDev());
+const TR={а:'a',б:'b',в:'v',г:'g',д:'d',е:'e',ё:'e',ж:'zh',з:'z',и:'i',й:'y',к:'k',л:'l',м:'m',н:'n',о:'o',п:'p',р:'r',с:'s',т:'t',у:'u',ф:'f',х:'h',ц:'c',ч:'ch',ш:'sh',щ:'sch',ъ:'',ы:'y',ь:'',э:'e',ю:'yu',я:'ya'};
+const slugOf=g=>[...String(g).toLowerCase()].map(ch=>TR[ch]!==undefined?TR[ch]:/[a-z0-9]/.test(ch)?ch:'-').join('').replace(/-+/g,'-').replace(/^-|-$/g,'');
+const CAL_DEF={f:'s',e:false,kch:true,fk:true,cnl:true,a:0};
+let co=Object.assign({},CAL_DEF,store.get('sch.calOpts')||{});
+function calQuery(o){
+  const p=[];
+  if(o.f!=='s')p.push('f='+o.f);if(o.e)p.push('e=1');if(!o.kch)p.push('kch=0');if(!o.fk)p.push('fk=0');if(!o.cnl)p.push('cnl=0');if(o.a)p.push('a='+o.a);
+  return p.length?'?'+p.join('&'):'';
+}
+/* название пары в календаре — так же, как его делает воркер */
+const CAL_EMO={lec:'📖',pr:'✏️',sem:'💬',lab:'🧪',cur:'👥',fk:'🏃',oth:'📌'};
+function calTitle(l,o){
+  let [label,cls]=typeInfo(l);
+  if(l.c==='ФК'&&cls!=='exam')cls='fk';
+  const full=l.xn?l.c:nameOf(l.c),code=l.xn?l.c:l.c==='КЧ'?'Кураторский час':l.c;
+  let t;
+  if(cls==='exam')t='📝 '+(o.f==='f'?full:code)+' · '+label;
+  else if(cls==='cur')t='Кураторский час';
+  else if(o.f==='f')t=full;
+  else if(o.f==='c'||cls==='fk')t=code;
+  else if(l.xn)t=code+(l.y&&TYPES[l.y]?' · '+label:'');
+  else t=code+' · '+label;
+  if(l.x==='cancel')return '❌ ОТМЕНА · '+t;
+  return (o.e&&cls!=='exam'?(CAL_EMO[cls]||CAL_EMO.oth)+' ':'')+t;
+}
+function calPreview(){
+  const now=new Date();
+  const up=merged.filter(l=>lessonEnd(l)>now&&(co.kch||l.c!=='КЧ')&&(co.fk||l.c!=='ФК')&&(co.cnl||l.x!=='cancel'));
+  const d0=up.length?up[0].d:null,ls=up.filter(l=>l.d===d0).slice(0,3);
+  if(!ls.length)return '';
+  return '<div class="calw"><div class="cwh">'+esc(shortDate(fromKey(d0)))+'</div>'+ls.map(l=>{const r=roomOf(l),[,cls]=typeInfo(l);
+    return '<div class="cwr '+cls+'"><i></i><div><b>'+esc(calTitle(l,co))+'</b><span>'+l.t1+'–'+l.t2+(r?' · каб. '+esc(r):'')+'</span></div></div>'}).join('')+'</div>';
+}
+function calSheetHTML(){
+  const sub=store.get('sch.cal');
+  const seg=(id,opts,v)=>'<div class="seg" id="'+id+'">'+opts.map(([k,t])=>'<button data-v="'+k+'" class="'+(String(v)===String(k)?'on':'')+'">'+t+'</button>').join('')+'</div>';
+  const tog=(id,t,on,sm)=>'<div class="row"><span>'+t+(sm?'<small>'+sm+'</small>':'')+'</span><button class="tog'+(on?' on':'')+'" id="'+id+'"></button></div>';
+  let warn='';
+  if(sub&&sub.group&&sub.group!==settings.group)warn='<div class="xnote" style="margin-bottom:12px">⚠️ Сейчас у вас подписка на группу <b>'+esc(sub.group)+'</b>. Сначала удалите тот календарь из телефона, иначе в нём будут пары двух групп.</div>';
+  else if(sub)warn='<div class="xnote" style="margin-bottom:12px">Вы уже подписаны ('+esc(fmtTs(sub.at))+'). Если подпишетесь заново — удалите старый календарь, иначе пары задвоятся.</div>';
+  return '<div class="sbox sj"><h2>📅 Расписание в календарь</h2>'+
+    '<div class="sm" style="margin:4px 0 14px">Пары группы <b>'+esc(settings.group)+'</b> появятся в календаре телефона, его виджете и на экране блокировки. Обновляются сами.</div>'+warn+
+    '<h5 style="margin-top:4px">Так будет в календаре</h5>'+calPreview()+
+    '<h5>Название пары</h5>'+seg('coF',[['s','АХД · Лекция'],['f','Полное'],['c','АХД']],co.f)+
+    '<div class="box" style="margin-top:14px">'+tog('coE','Эмодзи типов пар',co.e,'📖 лекция, ✏️ практика, 🧪 лаба')+
+      tog('coK','Кураторский час',co.kch)+tog('coP','Физкультура',co.fk)+tog('coC','Отменённые пары',co.cnl,'Видны как «❌ ОТМЕНА»')+
+      '<div class="row"><span>Напоминание<small>Работает на iPhone</small></span><select id="coA">'+[[0,'Нет'],[5,'За 5 мин'],[10,'За 10 мин'],[15,'За 15 мин'],[30,'За 30 мин'],[60,'За час']].map(([v,t])=>'<option value="'+v+'"'+(+co.a===v?' selected':'')+'>'+t+'</option>').join('')+'</select></div></div>'+
+    '<p class="info" style="margin:12px 0 0;padding:0 2px">Откроется браузер — там подтвердите подписку. Календарь обновляется с задержкой (iPhone — примерно раз в час, Google — до суток), поэтому <b>срочные изменения</b> смотрите здесь, в приложении.</p>'+
+    '</div><button class="done" id="calGo" style="background:var(--accent);color:#fff">Подписаться</button><button class="done" id="sheetOk">Отмена</button>';
+}
+function openCalSheet(){
+  if(!calOn())return;
+  const re=()=>{const sc=sheet.scrollTop;sheet.innerHTML=calSheetHTML();sheet.scrollTop=sc;bindCalSheet()};
+  const save=()=>{store.set('sch.calOpts',co);re();tick()};
+  function bindCalSheet(){
+    $('#sheetOk').onclick=closeSheet;
+    $('#coF').onclick=e=>{const b=e.target.closest('button');if(b){co.f=b.dataset.v;save()}};
+    [['#coE','e'],['#coK','kch'],['#coP','fk'],['#coC','cnl']].forEach(([id,k])=>{$(id).onclick=()=>{co[k]=!co[k];save()}});
+    $('#coA').onchange=e=>{co.a=+e.target.value;save()};
+    $('#calGo').onclick=()=>{
+      const url=CAL_API+'/sub/'+slugOf(settings.group)+calQuery(co);
+      store.set('sch.cal',{group:settings.group,o:co,at:Date.now()});
+      stPost('/api/visit',{ping:1,cal:calQuery(co)||'default'});
+      closeSheet();
+      try{if(inTg&&tg.openLink)tg.openLink(url);else{const w=window.open(url,'_blank');if(!w)location.href=url}}catch(e){location.href=url}
+      toast('Откроется браузер — подтвердите подписку там');
+      if(view==='set')setTimeout(renderSettings,300);
+    };
+  }
+  openSheet(calSheetHTML());bindCalSheet();
+  try{tg&&tg.HapticFeedback&&tg.HapticFeedback.impactOccurred('light')}catch(e){}
+}
+function calRow(){
+  if(!calOn())return '';
+  const sub=store.get('sch.cal');
+  if(sub&&sub.group===settings.group)return '<div class="row"><span>Календарь телефона<small>Подписка оформлена ✓</small></span><button class="btn s" id="calBtn2" style="width:auto;padding:10px 14px;font-size:14px">Настроить</button></div>';
+  return '<div class="pad"><button class="btn p" id="calBtn2">📅 Добавить в календарь</button><p class="info" style="margin-top:8px;padding:0 2px">Пары будут видны в виджете календаря на главном экране — без захода в приложение.'+(sub?' Сейчас подписка оформлена на другую группу ('+esc(sub.group)+').':'')+'</p></div>';
+}
+
 /* ---------- настройки ---------- */
 function fmtDate(iso){try{const d=new Date(iso);return d.getDate()+' '+MONTHS[d.getMonth()]+' '+d.getFullYear()+', '+pad(d.getHours())+':'+pad(d.getMinutes())}catch(e){return ''}}
 function fmtTs(ts){return ts?fmtDate(new Date(ts).toISOString()):'—'}
@@ -1547,7 +1647,7 @@ function renderSettings(){
   '<div class="grp"><h4>Отображение</h4><div class="box">'+
     '<div class="row"><span>Преподаватели</span><button class="tog'+(settings.teachers?' on':'')+'" id="tgT"></button></div>'+
     '<div class="row"><span>Время окончания пары</span><button class="tog'+(settings.endTime?' on':'')+'" id="tgE"></button></div></div></div>'+
-  (hsBlock?'<div class="grp"><h4>Приложение</h4><div class="box">'+hsBlock+'</div></div>':'')+
+  ((hsBlock||calOn())?'<div class="grp"><h4>Приложение</h4><div class="box">'+hsBlock+(hsBlock&&calOn()?'<div style="border-top:1px solid var(--line)"></div>':'')+calRow()+'</div></div>':'')+
   nfHTML()+'<div class="grp"><h4>Помощь</h4><div class="box"><div class="pad">'+((activeNotices().length||upcomingChanges().length)?'<button class="btn s" id="annBtn">📢 Объявления и изменения</button>':'')+'<button class="btn s" id="tourBtn">Показать обучение</button></div></div></div>'+
   '<div class="grp"><h4>Расписание</h4><div class="box">'+
     '<div class="kv"><span>Файл</span><span>'+esc(data.file||'—')+(data.isDefault?' (с сервера)':' (загружен вручную)')+'</span></div>'+
@@ -1572,6 +1672,7 @@ function renderSettings(){
   const ab=$('#annBtn');if(ab)ab.onclick=()=>openNotices(activeNotices(),upcomingChanges());
   nfBind();
   const h=$('#hsBtn');if(h)h.onclick=hsAction;
+  const cb=$('#calBtn2');if(cb)cb.onclick=openCalSheet;
   $('#chkBtn').onclick=async()=>{
     const b=$('#chkBtn');b.textContent='Проверяем…';
     try{const r=await sync();if(r==='same')toast('У вас актуальная версия');if(view==='set')renderSettings()}
@@ -1658,6 +1759,8 @@ function startOnboarding(replay){
   S.push('<div class="art"><div class="mk"><div class="nx"><b>Следующая:</b> Базы данных · через 25 мин</div><div class="st"><span>ПН<b>2</b></span><span>ВТ<b>3</b></span><span>СР<b>4</b></span><span class="on">ЧТ<b>5</b></span><span>ПТ<b>6</b></span><span>СБ<b>7</b></span><span>ВС<b>8</b></span></div><div class="sw"><div class="cd" style="--c:var(--lec)"><i></i><div>Информационные системы<small>Лекция · каб. 807</small></div><em>15:00</em></div><div class="cd" style="--c:var(--lab)"><i></i><div>Системы баз данных<small>Лабораторная · каб. 505</small></div><em>16:35</em></div></div></div></div><h2>Ваш день</h2><p>Листайте влево и вправо, чтобы менять дни. Нажмите на пару — откроются время, аудитория и преподаватели. Сверху — сколько осталось до следующей пары.</p>');
   S.push('<div class="art"><div class="mk"><div class="dh">Понедельник, 2 ноября</div><div class="cd" style="--c:var(--pr)"><i></i><div>Иностранный язык<small>Практика · каб. 806а</small></div><em>13:25</em></div><div class="cd" style="--c:var(--lab)"><i></i><div>Анализ управленческих решений<small>Лабораторная · каб. 513</small></div><em>15:00</em></div><div class="dh">Вторник, 3 ноября</div><div class="cd" style="--c:var(--lec)"><i></i><div>Правовое регулирование<small>Лекция · каб. 807</small></div><em>15:00</em></div></div></div><h2>Вся неделя сразу</h2><p>Вкладка «Неделя» показывает все пары подряд. Листайте недели вперёд и назад, чтобы спланировать загрузку.</p>');
   S.push('<div class="art"><div class="mk"><div class="big">8<small> пар осталось из 26</small></div><div class="prog"><i style="width:70%"></i></div><div class="sm" style="margin-bottom:6px">Информационные системы и технологии</div><span class="pill" style="--c:var(--lec)">Лекции: ещё 3</span><span class="pill" style="--c:var(--lab)">Лабораторные: ещё 4</span><span class="pill" style="--c:var(--exam)">Зачёт: ✓</span><div class="sm" style="margin-top:12px">Дни впереди: Пн ×4 · Чт ×3</div></div></div><h2>Предметы и остаток пар</h2><p>Выберите предмет и узнайте, сколько пар осталось и в какие дни. Есть поиск по названию, преподавателю и аудитории, а также список ближайших зачётов и экзаменов.</p>');
+  const canCal=calOn();
+  if(canCal)S.push('<div class="art"><div class="mk"><div class="dh">Календарь · сегодня</div><div class="cd" style="--c:var(--accent)"><i></i><div>АХД · Лекция<small>15:00–16:25 · каб. 807</small></div></div><div class="cd" style="--c:var(--accent)"><i></i><div>📝 СБД · Зачёт<small>16:35–18:00 · каб. 505</small></div></div><div class="cd" style="--c:var(--accent);opacity:.6"><i></i><div>❌ ОТМЕНА · WD · Лекция<small>18:20–19:45</small></div></div></div></div><h2>Пары прямо на экране</h2><p>Подпишитесь на расписание в календаре телефона — пары появятся в виджете календаря и на экране блокировки. Отмены и переносы подтянутся сами.</p><button class="btn s" id="onbCal" style="margin-top:18px;max-width:340px">📅 Добавить в календарь</button>');
   S.push('<div class="art"><div class="mk"><div class="set"><span>Тема</span><span style="color:var(--muted)">Авто</span></div><div class="set"><span>Цвет акцента</span><span class="sws"><i style="--c:#4f5bff"></i><i style="--c:#19c37d"></i><i style="--c:#ff9f1c"></i><i style="--c:#ff5a7a"></i></span></div><div class="set"><span>Преподаватели</span><span class="tg"></span></div></div></div><h2>Настройте под себя</h2><p>Тема, цвет, показ преподавателей — всё в настройках.'+(canNf?' Включите напоминания — бот пришлёт сообщение перед парой.':'')+(canHs?' А ярлык на главном экране открывает расписание в одно касание.':'')+'</p>'+(canNf?'<button class="btn s" id="onbNf" style="margin-top:18px;max-width:340px">🔔 Включить напоминания о парах</button>':'')+(canHs?'<button class="btn s" id="onbHs" style="margin-top:10px;max-width:340px">📲 Добавить на главный экран</button>':''));
   const n=S.length;let i=0;
   const el=document.createElement('div');el.className='onb';el.id='onb';
@@ -1687,6 +1790,7 @@ function startOnboarding(replay){
   if(g)g.onclick=e=>{const b=e.target.closest('button');if(!b)return;settings.group=b.dataset.g;saveSettings();buildIndex();
     [...g.children].forEach(x=>x.classList.toggle('on',x===b));tick()};
   const hb=$('#onbHs');if(hb)hb.onclick=hsAction;
+  const cbn=$('#onbCal');if(cbn)cbn.onclick=()=>{finish();setTimeout(openCalSheet,480)};
   const nb=$('#onbNf');if(nb)nb.onclick=async()=>{nb.disabled=true;const ok=await nfSave({active:true,lead:10,updates:true},true);if(ok){nb.textContent='Напоминания включены ✓'}else nb.disabled=false};
   let sx=0,sy=0;const vp=$('#onbVp');
   vp.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY},{passive:true});
@@ -1717,6 +1821,8 @@ function boot(){
   settings.launches=(settings.launches||0)+1;saveSettings();
   const q=new URLSearchParams(location.search).get('date');
   if(q&&/^\d{4}-\d{2}-\d{2}$/.test(q))sel=fromKey(q);
+  const sp=inTg&&tg.initDataUnsafe&&tg.initDataUnsafe.start_param;  /* t.me/auschedulebot?startapp=2026-11-20 */
+  if(sp&&/^\d{4}-\d{2}-\d{2}$/.test(sp))sel=fromKey(sp);
   renderAll();
   setTimeout(()=>{const sp=$('#splash');if(!sp)return;sp.classList.add('hide');setTimeout(()=>sp.remove(),600)},700);
   hsDetect(()=>{if(view==='set')renderSettings();setTimeout(maybeInvite,2500)});
