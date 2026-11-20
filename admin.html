@@ -289,7 +289,7 @@ async function publish(){
   busy=false;render();
 }
 async function discard(){
-  if(!confirm('Сбросить все неопубликованные правки?'))return;
+  if(!await ask('Сбросить все неопубликованные правки?'))return;
   store.del('adm.draft');dirty=false;log=[];
   if(conn==='ok'){try{await loadDoc()}catch(e){toast(e.message,true)}}else await loadPublic();
   render();
@@ -340,7 +340,7 @@ function renderConn(){
     if(!cfg.token||!cfg.owner||!cfg.repo){toast('Заполните токен, владельца и репозиторий',true);return}
     connect();
   };
-  const o=$('#cOut');if(o)o.onclick=()=>{if(!confirm('Удалить токен из этого браузера?'))return;cfg.token='';store.set('adm.cfg',cfg);conn='none';render()};
+  const o=$('#cOut');if(o)o.onclick=async()=>{if(!await ask('Удалить токен из этого браузера?'))return;cfg.token='';store.set('adm.cfg',cfg);conn='none';render()};
   const cl=$('#cClose');if(cl)cl.onclick=()=>{connOpen=false;renderConn()};
 }
 function renderTabs(){[...$('#tabs').children].forEach(b=>b.classList.toggle('on',b.dataset.t===tab))}
@@ -375,17 +375,17 @@ function renderAnn(){
     }).join(''):'<div class="none">Объявлений пока нет.</div>')+
     (canEdit()&&list.some(n=>nStatus(n)[1]==='off')?'<button class="btn s w" id="nClean" style="margin-top:6px">Удалить истёкшие</button>':'');
   const nn=$('#nNew');if(nn)nn.onclick=()=>noticeForm(null);
-  const fc=$('#flCal');if(fc)fc.onclick=()=>{
+  const fc=$('#flCal');if(fc)fc.onclick=async()=>{
     const on=!(doc.flags&&doc.flags.cal);
-    if(on&&!confirm('Показать кнопку «Добавить в календарь» всем студентам?'))return;
+    if(on&&!await ask('Показать кнопку «Добавить в календарь» всем студентам?'))return;
     doc.flags=Object.assign({},doc.flags||{},{cal:on});
     markDirty(on?'календарь включён для всех':'календарь выключен');
   };
   const cl=$('#nClean');if(cl)cl.onclick=()=>{const k=doc.notices.length;doc.notices=doc.notices.filter(n=>nStatus(n)[1]!=='off');markDirty('удалены истёкшие объявления ('+(k-doc.notices.length)+')')};
   bindSeen($('#body'));
   $('#body').querySelectorAll('[data-ed]').forEach(b=>b.onclick=()=>noticeForm(doc.notices.find(n=>n.id===b.dataset.ed)));
-  $('#body').querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{
-    const n=doc.notices.find(x=>x.id===b.dataset.del);if(!n||!confirm('Удалить объявление «'+(n.title||n.text.slice(0,40))+'»?'))return;
+  $('#body').querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{
+    const n=doc.notices.find(x=>x.id===b.dataset.del);if(!n||!await ask('Удалить объявление «'+(n.title||n.text.slice(0,40))+'»?'))return;
     doc.notices=doc.notices.filter(x=>x!==n);markDirty('удалено объявление «'+(n.title||n.text.slice(0,30))+'»');
   });
 }
@@ -395,6 +395,19 @@ function groupsHTML(sel,all){
   return '<label style="margin-bottom:0">Группы</label><div class="gchk" id="fG">'+gs.map(g=>'<label><input type="checkbox" value="'+esc(g)+'"'+(on(g)?' checked':'')+'> '+esc(g)+'</label>').join('')+'</div>';
 }
 const readGroups=()=>{const el=$('#fG');if(!el)return null;return[...el.querySelectorAll('input:checked')].map(i=>i.value)};
+/* Своё окно подтверждения вместо confirm(): во встроенном браузере Telegram confirm() молча не срабатывает */
+function ask(msg){
+  return new Promise(res=>{
+    let ov=document.getElementById('askOv');
+    if(!ov){ov=document.createElement('div');ov.id='askOv';document.body.appendChild(ov)}
+    ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px';
+    ov.innerHTML='<div style="background:var(--card);border:1px solid var(--line);border-radius:20px;padding:18px;max-width:380px;width:100%"><div style="font-weight:700;white-space:pre-line;margin-bottom:16px">'+esc(msg)+'</div><div class="acts" style="margin:0"><button class="btn p" id="askY">Да</button><button class="btn s" id="askN">Отмена</button></div></div>';
+    const done=v=>{ov.remove();res(v)};
+    ov.querySelector('#askY').onclick=()=>done(true);
+    ov.querySelector('#askN').onclick=()=>done(false);
+    ov.onclick=e=>{if(e.target===ov)done(false)};
+  });
+}
 function modal(html){$('#mbox').innerHTML=html;$('#ov').classList.add('on');$('#mbox').scrollTop=0;const c=$('#mCancel');if(c)c.onclick=closeModal}
 function closeModal(){$('#ov').classList.remove('on')}
 $('#ov').onclick=e=>{if(e.target.id==='ov')closeModal()};
@@ -474,9 +487,9 @@ function renderChg(){
   b.querySelectorAll('[data-cancel]').forEach(x=>x.onclick=()=>changeForm('cancel',byT(x.dataset.cancel),null));
   b.querySelectorAll('[data-cedit]').forEach(x=>x.onclick=()=>{const c=doc.changes.find(y=>y.id===x.dataset.cedit);changeForm(c.act,byT(x.dataset.t),c)});
   b.querySelectorAll('[data-aedit]').forEach(x=>x.onclick=()=>changeForm('add',null,doc.changes.find(y=>y.id===x.dataset.aedit)));
-  b.querySelectorAll('[data-crm]').forEach(x=>x.onclick=()=>{
+  b.querySelectorAll('[data-crm]').forEach(x=>x.onclick=async()=>{
     const c=doc.changes.find(y=>y.id===x.dataset.crm);if(!c)return;
-    if(!confirm(c.act==='add'?'Удалить добавленную пару?':'Убрать это изменение? Пара вернётся как в расписании.'))return;
+    if(!await ask(c.act==='add'?'Удалить добавленную пару?':'Убрать это изменение? Пара вернётся как в расписании.'))return;
     doc.changes=doc.changes.filter(y=>y!==c);markDirty('убрано изменение '+fd(c.d)+' '+(c.t1||c.nt1));
   });
   b.querySelectorAll('[data-go]').forEach(x=>x.onclick=()=>{
@@ -728,7 +741,7 @@ function renderBc(){
   $('#bTx').oninput=e=>{bc.text=e.target.value;bcSave()};
   $('#bBtn').onchange=e=>{bc.btn=e.target.value;bcSave()};
   const g=$('#bG');if(g)g.onchange=e=>{bc.grp=e.target.value;bcSave();renderBc()};
-  const o=$('#bOut');if(o)o.onclick=()=>{if(!confirm('Удалить токен бота из этого браузера?'))return;bc.token='';bc.me=null;bcSave();renderBc()};
+  const o=$('#bOut');if(o)o.onclick=async()=>{if(!await ask('Удалить токен бота из этого браузера?'))return;bc.token='';bc.me=null;bcSave();renderBc()};
   $('#bChk').onclick=async()=>{
     bc.token=$('#bTok').value.trim();if(!bc.token){toast('Вставьте токен',true);return}
     try{const j=await tgApi('getMe');if(!j.ok)throw new Error(j.description||'неверный токен');bc.me=j.result.username;bcSave();toast('Бот @'+bc.me+' подключён');renderBc()}
@@ -753,7 +766,7 @@ function renderBc(){
     const list=bcRecipients();if(!list.length){toast('Нет получателей',true);return}
     const key_=bc.text.trim()+'|'+bc.btn;
     const already=sent[key_]||[];
-    if(!confirm('Отправить сообщение '+list.length+' '+(list.length%10===1&&list.length%100!==11?'человеку':'людям')+'?'+(already.length?'\n\nЭтот же текст уже получили '+already.length+' чел. — им повторно не отправится.':'')))return;
+    if(!await ask('Отправить сообщение '+list.length+' '+(list.length%10===1&&list.length%100!==11?'человеку':'людям')+'?'+(already.length?'\n\nЭтот же текст уже получили '+already.length+' чел. — им повторно не отправится.':'')))return;
     BC={busy:true,stop:false,res:{total:list.length,done:0,ok:0,blocked:0,skip:0,err:[]}};renderBc();
     const done=new Set(already);
     for(const u of list){
