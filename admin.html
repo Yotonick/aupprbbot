@@ -51,7 +51,8 @@ textarea{resize:vertical;min-height:110px;line-height:1.4}
 .connok b{color:var(--ok)}
 .err{color:var(--bad);font-weight:700;font-size:14px;margin:6px 0 10px}
 .tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--card2);border-radius:14px;padding:4px;margin:4px 0 14px}
-.tabs button{padding:10px;border-radius:11px;font-weight:800;color:var(--muted)}
+.tabs{grid-template-columns:repeat(4,1fr)!important}
+.tabs button{padding:10px 2px;font-size:12px;min-width:0;overflow-wrap:anywhere;border-radius:11px;font-weight:800;color:var(--muted)}
 .tabs button.on{background:var(--accent);color:#fff}
 .it{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px;margin-bottom:10px}
 .it.past{opacity:.55}
@@ -142,7 +143,7 @@ details summary{cursor:pointer;font-weight:700;color:var(--accent);font-size:14p
   <h1>Админка</h1>
   <div class="sub">Объявления и изменения пар · <a href="schedule.html" target="_blank" rel="noopener">открыть расписание</a></div>
   <section class="card" id="conn"></section>
-  <div class="tabs" id="tabs"><button data-t="ann" class="on">Объявления</button><button data-t="chg">Изменения пар</button><button data-t="vis">Посетители</button></div>
+  <div class="tabs" id="tabs"><button data-t="ann" class="on">Объявления</button><button data-t="chg">Изменения пар</button><button data-t="vis">Посетители</button><button data-t="bc">Рассылка</button></div>
   <section id="body"></section>
 </main>
 <div class="pub" id="pub"><div class="in"><div class="tx" id="pubTx"></div><button class="btn s" id="pubUndo">Сбросить</button><button class="btn p" id="pubBtn">Опубликовать</button></div></div>
@@ -312,7 +313,7 @@ function slots(){
 }
 
 /* ---------- рендер ---------- */
-function render(){renderConn();renderTabs();if(tab==='ann')renderAnn();else if(tab==='chg')renderChg();else renderVis();renderPub()}
+function render(){renderConn();renderTabs();if(tab==='ann')renderAnn();else if(tab==='chg')renderChg();else if(tab==='bc')renderBc();else renderVis();renderPub()}
 function renderConn(){
   const el=$('#conn');
   if(conn==='ok'&&!connOpen){
@@ -667,6 +668,108 @@ async function userModal(id){
     '<div class="hd">История заходов</div>'+([...byDay].map(([k,ss])=>'<div class="sm" style="margin:10px 2px 4px;font-weight:800">'+fd(k)+'</div>'+ss.map(s=>'<div class="sr"><span>'+hm(new Date(s.start))+(s.end-s.start>=60000?' – '+hm(new Date(s.end)):'')+'</span><span>'+dur(s.start,s.end)+' · '+esc(plat(s.platform))+'</span></div>').join('')).join('')||'<div class="none">Нет данных</div>')+
     '<div class="mact" style="margin-top:14px"><button class="btn s" id="mCancel">Закрыть</button></div>');
 }
+/* ---------- рассылка в личку от бота ---------- */
+/* Получатели — люди из статистики (открывали приложение через Telegram).
+   Дойдёт только тем, кто хоть раз нажал «Старт» у бота или разрешил ему писать; остальным Telegram не даст отправить. */
+let bc=Object.assign({token:'',text:'',btn:'app',grp:'',me:null},store.get('adm.bc')||{});
+let BC={busy:false,stop:false,res:null};
+const bcSave=()=>store.set('adm.bc',{token:bc.token,text:bc.text,btn:bc.btn,grp:bc.grp,me:bc.me});
+const APP_URL=()=>location.href.replace(/[^/]*([?#].*)?$/,'')+'schedule.html';
+async function tgApi(method,body){
+  const r=await fetch('https://api.telegram.org/bot'+bc.token+'/'+method,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body||{})});
+  let j=null;try{j=await r.json()}catch(e){}
+  if(!j)throw new Error('Telegram: HTTP '+r.status);
+  return j;
+}
+function bcRecipients(){
+  if(!ST.ov)return[];
+  return ST.ov.users.filter(u=>u.id>0&&(!bc.grp||u.grp===bc.grp));
+}
+function bcMarkup(){
+  if(bc.btn==='app')return{inline_keyboard:[[{text:'📅 Открыть расписание',web_app:{url:APP_URL()}}]]};
+  if(bc.btn==='cal')return{inline_keyboard:[[{text:'📅 Добавить в календарь',web_app:{url:APP_URL()+'?open=cal'}}]]};
+  return undefined;
+}
+const bcText=u=>bc.text.replace(/\{имя\}/gi,(u&&u.first_name)||'').replace(/^[,\s]+/,'').trim();
+async function bcSend(u){
+  const body={chat_id:u.id,text:bcText(u),disable_web_page_preview:true};
+  const m=bcMarkup();if(m)body.reply_markup=m;
+  for(let tries=0;tries<3;tries++){
+    const j=await tgApi('sendMessage',body);
+    if(j.ok)return 'ok';
+    if(j.error_code===429){await new Promise(r=>setTimeout(r,((j.parameters&&j.parameters.retry_after)||3)*1000+300));continue}
+    if(j.error_code===403)return 'blocked';
+    if(j.error_code===400&&/chat not found/i.test(j.description||''))return 'blocked';
+    throw new Error(j.description||('ошибка '+j.error_code));
+  }
+  throw new Error('слишком много запросов, попробуйте позже');
+}
+function renderBc(){
+  const b=$('#body');
+  if(!stOK()||!ST.ov){b.innerHTML='<div class="card sm">Получатели берутся из статистики. Откройте вкладку «Посетители» и подключите статистику, потом вернитесь сюда.</div>';if(stOK())loadStats();return}
+  const rec=bcRecipients(),gs=[...new Set(ST.ov.users.map(u=>u.grp).filter(Boolean))].sort();
+  const sent=store.get('adm.bcSent')||{};
+  const r=BC.res;
+  b.innerHTML='<div class="card"><h2>Бот</h2>'+
+    '<label>Токен бота (от @BotFather)<input id="bTok" type="password" autocomplete="off" placeholder="123456:ABC…" value="'+esc(bc.token)+'"></label>'+
+    (bc.me?'<div class="sm" style="margin:-4px 0 8px">✓ Подключён @'+esc(bc.me)+'</div>':'')+
+    '<div class="acts" style="margin:0"><button class="btn s" id="bChk">Проверить токен</button>'+(bc.token?'<button class="btn d" id="bOut">Забыть токен</button>':'')+'</div>'+
+    '<div class="sm" style="margin-top:8px">Токен хранится только в этом браузере и отправляется только на api.telegram.org. Никому его не давайте.</div></div>'+
+    '<div class="card"><h2>Сообщение</h2>'+
+    '<label>Текст <span style="font-weight:500">({имя} — подставится имя человека)</span><textarea id="bTx" rows="7" placeholder="Привет, {имя}! …">'+esc(bc.text)+'</textarea></label>'+
+    '<label>Кнопка под сообщением<select id="bBtn"><option value="app"'+(bc.btn==='app'?' selected':'')+'>📅 Открыть расписание</option><option value="cal"'+(bc.btn==='cal'?' selected':'')+'>📅 Добавить в календарь (сразу откроет окно подписки)</option><option value=""'+(!bc.btn?' selected':'')+'>Без кнопки</option></select></label>'+
+    (gs.length>1?'<label>Кому<select id="bG"><option value="">Все группы</option>'+gs.map(g=>'<option'+(g===bc.grp?' selected':'')+'>'+esc(g)+'</option>').join('')+'</select></label>':'')+
+    '<div class="sm">Получателей: <b>'+rec.length+'</b> — все, кто открывал приложение через Telegram. Сообщение дойдёт только тем, кто хоть раз нажимал «Старт» у бота; остальных Telegram пропустит, ничего страшного.</div>'+
+    '<div class="acts"><button class="btn s" id="bTest"'+(BC.busy?' disabled':'')+'>Отправить себе (тест)</button><button class="btn p" id="bAll"'+(BC.busy?' disabled':'')+'>'+(BC.busy?'Отправляем…':'Отправить всем ('+rec.length+')')+'</button>'+(BC.busy?'<button class="btn d" id="bStop">Стоп</button>':'')+'</div>'+
+    (r?'<div class="card" style="margin:12px 0 0;background:var(--card2)"><b>'+(BC.busy?'Идёт рассылка: ':'Готово: ')+r.done+' из '+r.total+'</b><div class="sm" style="margin-top:6px">✅ доставлено: '+r.ok+' · 🚫 не нажимали «Старт» или заблокировали: '+r.blocked+(r.skip?' · ⏭ уже получали: '+r.skip:'')+(r.err.length?' · ⚠ ошибки: '+r.err.length:'')+'</div>'+
+      (r.err.length?'<div class="sm" style="margin-top:6px;color:var(--bad)">'+r.err.slice(0,5).map(x=>esc(x)).join('<br>')+'</div>':'')+'</div>':'')+
+    '</div>';
+  $('#bTok').onchange=e=>{bc.token=e.target.value.trim();bc.me=null;bcSave();renderBc()};
+  $('#bTx').oninput=e=>{bc.text=e.target.value;bcSave()};
+  $('#bBtn').onchange=e=>{bc.btn=e.target.value;bcSave()};
+  const g=$('#bG');if(g)g.onchange=e=>{bc.grp=e.target.value;bcSave();renderBc()};
+  const o=$('#bOut');if(o)o.onclick=()=>{if(!confirm('Удалить токен бота из этого браузера?'))return;bc.token='';bc.me=null;bcSave();renderBc()};
+  $('#bChk').onclick=async()=>{
+    bc.token=$('#bTok').value.trim();if(!bc.token){toast('Вставьте токен',true);return}
+    try{const j=await tgApi('getMe');if(!j.ok)throw new Error(j.description||'неверный токен');bc.me=j.result.username;bcSave();toast('Бот @'+bc.me+' подключён');renderBc()}
+    catch(e){bc.me=null;bcSave();toast('Не получилось: '+e.message,true);renderBc()}
+  };
+  const st_=$('#bStop');if(st_)st_.onclick=()=>{BC.stop=true};
+  const check=()=>{
+    if(!bc.token){toast('Вставьте токен бота и нажмите «Проверить токен»',true);return false}
+    if(!bc.text.trim()){toast('Напишите текст сообщения',true);return false}
+    if(bc.text.length>3500){toast('Слишком длинный текст',true);return false}
+    return true;
+  };
+  $('#bTest').onclick=async()=>{
+    if(!check())return;
+    const me=ST.ov.users.find(u=>String(u.username||'').toLowerCase()==='yotonick');
+    if(!me){toast('Не нашёл вас (@yotonick) в статистике — откройте приложение через Telegram и обновите',true);return}
+    try{const x=await bcSend(me);toast(x==='ok'?'Отправлено вам — проверьте Telegram':'Бот не может вам написать: нажмите «Старт» у бота',x!=='ok')}
+    catch(e){toast('Ошибка: '+e.message,true)}
+  };
+  $('#bAll').onclick=async()=>{
+    if(!check())return;
+    const list=bcRecipients();if(!list.length){toast('Нет получателей',true);return}
+    const key_=bc.text.trim()+'|'+bc.btn;
+    const already=sent[key_]||[];
+    if(!confirm('Отправить сообщение '+list.length+' '+(list.length%10===1&&list.length%100!==11?'человеку':'людям')+'?'+(already.length?'\n\nЭтот же текст уже получили '+already.length+' чел. — им повторно не отправится.':'')))return;
+    BC={busy:true,stop:false,res:{total:list.length,done:0,ok:0,blocked:0,skip:0,err:[]}};renderBc();
+    const done=new Set(already);
+    for(const u of list){
+      if(BC.stop)break;
+      if(done.has(u.id)){BC.res.skip++;BC.res.done++;continue}
+      try{const x=await bcSend(u);if(x==='ok'){BC.res.ok++;done.add(u.id);sent[key_]=[...done];store.set('adm.bcSent',sent)}else BC.res.blocked++}
+      catch(e){BC.res.err.push(uName(u)+': '+e.message)}
+      BC.res.done++;
+      if(tab==='bc')renderBc();
+      await new Promise(r=>setTimeout(r,70));
+    }
+    BC.busy=false;if(tab==='bc')renderBc();
+    toast(BC.stop?'Рассылка остановлена':'Рассылка завершена: доставлено '+BC.res.ok,!!BC.res.err.length);
+  };
+}
+
 /* «видели N из M» под объявлением или изменением */
 function audience(g){return ST.ov?ST.ov.users.filter(u=>!g||!g.length||g.includes(u.grp)):[]}
 function seenBadge(id,g){

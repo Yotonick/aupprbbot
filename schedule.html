@@ -1823,6 +1823,8 @@ function boot(){
   if(q&&/^\d{4}-\d{2}-\d{2}$/.test(q))sel=fromKey(q);
   const sp=inTg&&tg.initDataUnsafe&&tg.initDataUnsafe.start_param;  /* t.me/auschedulebot?startapp=2026-11-20 */
   if(sp&&/^\d{4}-\d{2}-\d{2}$/.test(sp))sel=fromKey(sp);
+  /* ?open=cal — сразу открыть окно подписки на календарь (кнопка из рассылки бота) */
+  if(new URLSearchParams(location.search).get('open')==='cal')setTimeout(()=>{if(!$('#onb')&&calOn())openCalSheet()},1500);
   renderAll();
   setTimeout(()=>{const sp=$('#splash');if(!sp)return;sp.classList.add('hide');setTimeout(()=>sp.remove(),600)},700);
   hsDetect(()=>{if(view==='set')renderSettings();setTimeout(maybeInvite,2500)});
