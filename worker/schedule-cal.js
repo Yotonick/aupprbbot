@@ -12,6 +12,7 @@
      fk  = 0 — скрыть физкультуру
      cnl = 0 — скрыть отменённые пары (по умолчанию они видны как «❌ ОТМЕНА»)
      a   = 5|10|15|30|60 — напоминание за N минут (работает на iPhone)
+   Плюс: ежедневное сообщение от бота в 20:00 — раздел «Ежедневное сообщение» ниже.
    ===================================================================== */
 
 const SITE = 'https://yotonick.github.io/aupprbbot/';   // откуда брать расписание (наружу не показывается)
@@ -271,13 +272,236 @@ function subPage(host, group, o, ua) {
     '</body></html>';
 }
 
+
+/* =====================================================================
+   Ежедневное сообщение «Завтра у тебя…» от бота — каждый выбирает время сам (17:00–23:00 по Минску, по умолчанию 20:00)
+   Нужно в настройках воркера (см. worker/README.md):
+     KV-хранилище с именем переменной KV, секреты BOT_TOKEN и STATS_KEY,
+     Cron Trigger «0-9 14-20 * * *» (каждый час 14–20 UTC = 17–23 Минск, первые 10 минут).
+   Без них календарь работает как раньше, просто рассылки нет.
+   ===================================================================== */
+const STATS_API = 'https://schedule-stats.yotonick.workers.dev';  // откуда брать список людей
+const DEV_USERNAME = 'yotonick';                                   // кому слать тестовое сообщение
+const HOURS = [17, 18, 19, 20, 21, 22, 23];   // из чего можно выбрать время (по Минску)
+const DEF_HOUR = 20;
+const BATCH = 40;        // сколько сообщений за один запуск (лимит бесплатного Cloudflare — 50 запросов наружу)
+const WDN = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
+const MON = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+
+const minskKey = (offsetDays) => new Date(Date.now() + TZ_OFFSET * 3600e3 + (offsetDays || 0) * 864e5).toISOString().slice(0, 10);
+const keyDate = (k) => { const [y, m, d] = k.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); };
+const h = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+const plural = (n, a, b, c) => { n = Math.abs(n) % 100; const n1 = n % 10; return n > 10 && n < 20 ? c : n1 > 1 && n1 < 5 ? b : n1 === 1 ? a : c; };
+
+/* название пары как в календаре по умолчанию: «АХД · Лекция» */
+function shortTitle(C, l) {
+  const [label, cls] = C.typeInfo(l);
+  const code = l.xn ? l.c : l.c === 'КЧ' ? 'Кураторский час' : l.c;
+  if (cls === 'exam') return '📝 ' + code + ' · ' + label;
+  if (cls === 'cur') return 'Кураторский час';
+  if (l.c === 'ФК') return 'ФК';
+  if (l.xn) return code + (l.y && TYPES[l.y] ? ' · ' + label : '');
+  return code + ' · ' + label;
+}
+function dayList(data, notices, group, k) {
+  const C = ctx(data, group);
+  return { C, list: applyChanges(data.lessons[group] || [], group, notices, C.nameOf).filter((l) => l.d === k) };
+}
+/* текст сообщения на завтра; null — не отправлять */
+function buildMessage(data, notices, group, meta) {
+  const T = minskKey(0), D = minskKey(1), dd = keyDate(D);
+  const all = data.lessons[group] || [];
+  if (!all.length || D > all[all.length - 1].d) return null;      // семестр закончился
+  const { C, list } = dayList(data, notices, group, D);
+  const live = list.filter((l) => l.x !== 'cancel');
+  if (!list.length && dd.getUTCDay() === 0) return null;          // воскресенье без пар — молчим
+  const when = 'Завтра, ' + WDN[dd.getUTCDay()] + ', ' + dd.getUTCDate() + ' ' + MON[dd.getUTCMonth()];
+  const L = [];
+  if (!live.length) L.push('🎉 <b>' + when + '</b> — пар нет' + (list.length ? ' (все отменены)' : ''));
+  else L.push('📅 <b>' + when + '</b> — ' + live.length + ' ' + plural(live.length, 'пара', 'пары', 'пар'));
+  if (list.length) L.push('');
+  for (const l of list) {
+    const room = C.roomOf(l);
+    if (l.x === 'cancel') { L.push('❌ <s>' + l.t1 + ' ' + h(shortTitle(C, l)) + '</s> — отменена' + (l.xnote ? ': ' + h(l.xnote) : '')); continue; }
+    L.push((l.x ? '🔄 ' : '') + '<b>' + l.t1 + '</b> ' + h(shortTitle(C, l)) + (room ? ' · каб. ' + h(room) : ''));
+    if (l.xold) L.push('      <i>вместо ' + h(l.xold) + '</i>');
+    if (l.xot) L.push('      <i>перенесена с ' + l.xot + '</i>');
+    if (l.xnote) L.push('      <i>' + h(l.xnote) + '</i>');
+  }
+  /* серия дней из приложения */
+  const st = meta && +meta.st || 0;
+  if (st >= 2) {
+    if (meta.sd === T) L.push('', '🔥 Серия: <b>' + st + ' ' + plural(st, 'день', 'дня', 'дней') + '</b> — загляни завтра, чтобы не прервать');
+    else {
+      const todayHas = all.some((l) => l.d === T);
+      const prev = [...new Set(all.map((l) => l.d))].filter((k) => k < T).pop();
+      if (todayHas && meta.sd && prev && meta.sd >= prev) L.push('', '⚠️ Твоя серия 🔥' + st + ' сгорит в полночь — открой приложение сегодня');
+    }
+  }
+  L.push('', '<i>Время и отключение: в приложении → Настройки → Уведомления</i>');
+  return L.join('\n');
+}
+
+/* --- хранилище: ключ rem:u:<id>, всё в metadata {grp, off, blk, st, sd, hr} --- */
+const hourOf = (m) => HOURS.includes(+m.hr) ? +m.hr : DEF_HOUR;
+const minskHour = () => new Date(Date.now() + TZ_OFFSET * 3600e3).getUTCHours();
+async function getMeta(env, id) { const r = await env.KV.getWithMetadata('rem:u:' + id); return (r && r.metadata) || {}; }
+async function putMeta(env, id, m) { await env.KV.put('rem:u:' + id, '1', { metadata: m }); }
+async function allMeta(env) {
+  const out = {}; let cursor;
+  do {
+    const r = await env.KV.list({ prefix: 'rem:u:', cursor });
+    for (const k of r.keys) out[k.name.slice(6)] = k.metadata || {};
+    cursor = r.list_complete ? null : r.cursor;
+  } while (cursor);
+  return out;
+}
+async function statsUsers(env) {
+  const r = await fetch(STATS_API + '/api/admin/overview?days=1', { headers: { authorization: 'Bearer ' + env.STATS_KEY } });
+  if (!r.ok) throw new Error('статистика: HTTP ' + r.status);
+  const j = await r.json();
+  return (j.users || []).filter((u) => +u.id > 0);
+}
+async function tgSend(env, chatId, textMsg, date) {
+  const r = await fetch('https://api.telegram.org/bot' + env.BOT_TOKEN + '/sendMessage', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: chatId, text: textMsg, parse_mode: 'HTML', disable_web_page_preview: true,
+      reply_markup: { inline_keyboard: [[{ text: '📅 Открыть расписание', web_app: { url: SITE + 'schedule.html?date=' + date } }]] }
+    })
+  });
+  const j = await r.json().catch(() => ({}));
+  if (j.ok) return 'ok';
+  if (j.error_code === 429) return 'wait';
+  if (j.error_code === 403 || (j.error_code === 400 && /chat not found|user is deactivated/i.test(j.description || ''))) return 'blocked';
+  return 'error: ' + (j.description || r.status);
+}
+const remReady = (env) => !!(env && env.KV && env.BOT_TOKEN && env.STATS_KEY);
+
+/* один запуск рассылки. Cron вызывает его каждую минуту с :00 до :09 каждого часа 17–23 (по Минску).
+   За запуск — тем, чьё время уже наступило и кто сегодня ещё не получал (до 40 человек, лимит Cloudflare). */
+async function runDaily(env) {
+  if (!remReady(env)) return { skipped: 'не настроены KV / BOT_TOKEN / STATS_KEY' };
+  const T = minskKey(0), H = minskHour();
+  if (H < HOURS[0]) return { skipped: 'ещё рано' };
+  if (await env.KV.get('rem:done:' + T + ':' + H)) return { done: true };
+  const [users, metas, st] = await Promise.all([statsUsers(env), allMeta(env), load()]);
+  const sent = new Set(JSON.parse((await env.KV.get('rem:sent:' + T)) || '[]'));
+  const res = { ok: 0, blocked: 0, skipped: 0, errors: [] };
+  let n = 0, finished = true;
+  for (const u of users) {
+    const id = String(u.id);
+    if (sent.has(id)) continue;
+    const meta = metas[id] || {};
+    const group = meta.grp || u.grp;
+    if (hourOf(meta) > H) continue;                                   // время этого человека ещё не наступило
+    if (meta.off || meta.blk || !group || !st.data.groups.includes(group)) { sent.add(id); res.skipped++; continue; }
+    const msg = buildMessage(st.data, st.notices, group, meta);
+    if (!msg) { sent.add(id); res.skipped++; continue; }
+    if (n >= BATCH) { finished = false; break; }
+    n++;
+    const r = await tgSend(env, id, msg, minskKey(1));
+    if (r === 'wait') { finished = false; break; }
+    if (r === 'blocked') { await putMeta(env, id, Object.assign({}, meta, { grp: group, blk: 1 })); res.blocked++; }
+    else if (r === 'ok') res.ok++;
+    else res.errors.push(id + ': ' + r);
+    sent.add(id);
+  }
+  await env.KV.put('rem:sent:' + T, JSON.stringify([...sent]), { expirationTtl: 3 * 86400 });
+  if (finished) await env.KV.put('rem:done:' + T + ':' + H, '1', { expirationTtl: 3 * 86400 });
+  return Object.assign(res, { finished });
+}
+
+/* --- проверка данных из Telegram Mini App (initData) --- */
+async function hmac(key, msg) {
+  const k = await crypto.subtle.importKey('raw', typeof key === 'string' ? new TextEncoder().encode(key) : key, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return new Uint8Array(await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(msg)));
+}
+async function tgUser(initData, token) {
+  try {
+    const p = new URLSearchParams(initData || ''); const hash = p.get('hash'); if (!hash) return null;
+    p.delete('hash');
+    const dcs = [...p.entries()].map(([k, v]) => k + '=' + v).sort().join('\n');
+    const secret = await hmac('WebAppData', token);
+    const sig = [...(await hmac(secret, dcs))].map((b) => b.toString(16).padStart(2, '0')).join('');
+    if (sig !== hash) return null;
+    if (Date.now() / 1000 - (+p.get('auth_date') || 0) > 30 * 86400) return null;
+    const u = JSON.parse(p.get('user') || 'null');
+    return u && u.id ? u : null;
+  } catch (e) { return null; }
+}
+const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'content-type' };
+const json = (o, status) => new Response(JSON.stringify(o), { status: status || 200, headers: Object.assign({ 'content-type': 'application/json; charset=utf-8' }, CORS) });
+
+async function api(request, env, path) {
+  if (!remReady(env)) return json({ ok: false, error: 'not configured' }, 503);
+  let body = {}; try { body = await request.json(); } catch (e) {}
+  const u = await tgUser(body.initData, env.BOT_TOKEN);
+  if (!u) return json({ ok: false, error: 'bad initData' }, 401);
+  const id = String(u.id), meta = await getMeta(env, id);
+  const st = await load().catch(() => null);
+  const okGroup = (g) => g && st && st.data.groups.includes(g);
+  const out = () => json({ ok: true, prefs: { evening: !meta.off, hour: hourOf(meta) }, hours: HOURS, reachable: !meta.blk });
+  if (path === '/api/me') return out();
+  if (path === '/api/settings') {
+    const pr = body.prefs || {};
+    if (typeof pr.evening === 'boolean') { if (pr.evening) { delete meta.off; delete meta.blk; } else meta.off = 1; }
+    if (okGroup(pr.group)) meta.grp = pr.group;
+    if (HOURS.includes(+pr.hour)) meta.hr = +pr.hour;
+    await putMeta(env, id, meta);
+    return out();
+  }
+  if (path === '/api/hello') {
+    const streak = Math.max(0, Math.min(10000, +body.streak | 0));
+    const day = /^\d{4}-\d{2}-\d{2}$/.test(body.day || '') ? body.day : minskKey(0);
+    if (meta.st !== streak || meta.sd !== day || (okGroup(body.group) && meta.grp !== body.group)) {
+      meta.st = streak; meta.sd = day; if (okGroup(body.group)) meta.grp = body.group;
+      await putMeta(env, id, meta);
+    }
+    return json({ ok: true, reachable: !meta.blk, evening: !meta.off });
+  }
+  return json({ ok: false, error: 'not found' }, 404);
+}
+
+/* служебные адреса для вас: /remind/test?key=…  /remind/status?key=… (key — ключ статистики) */
+async function remindAdmin(url, env) {
+  if (!remReady(env)) return text('Рассылка не настроена: нужны KV, BOT_TOKEN и STATS_KEY (см. worker/README.md)', 503);
+  if (url.searchParams.get('key') !== env.STATS_KEY) return text('Неверный key', 403);
+  const T = minskKey(0);
+  if (url.pathname === '/remind/status') {
+    const [users, metas, sent] = await Promise.all([statsUsers(env), allMeta(env), env.KV.get('rem:sent:' + T)]);
+    const m = Object.values(metas), byH = {};
+    for (const u of users) { const x = metas[String(u.id)] || {}; if (!x.off && !x.blk) { const hh = hourOf(x); byH[hh] = (byH[hh] || 0) + 1; } }
+    return text('Людей в статистике: ' + users.length + '\nОтключили напоминания: ' + m.filter((x) => x.off).length +
+      '\nБот не может написать (не нажимали «Старт»): ' + m.filter((x) => x.blk).length +
+      '\nВремя отправки: ' + HOURS.filter((hh) => byH[hh]).map((hh) => hh + ':00 — ' + byH[hh]).join(', ') +
+      '\nСегодня уже получили или пропущены: ' + (sent ? JSON.parse(sent).length : 0));
+  }
+  const users = await statsUsers(env);
+  const me = users.find((u) => String(u.username || '').toLowerCase() === DEV_USERNAME);
+  if (!me) return text('Не нашёл @' + DEV_USERNAME + ' в статистике — откройте приложение через Telegram', 404);
+  const meta = await getMeta(env, me.id), st = await load();
+  const group = meta.grp || me.grp || st.data.groups[0];
+  const msg = buildMessage(st.data, st.notices, group, meta) || '(завтра сообщение не отправилось бы: воскресенье без пар или конец семестра)';
+  const r = await tgSend(env, me.id, msg, minskKey(1));
+  return text(r === 'ok' ? 'Отправлено вам в Telegram ✓' : 'Не отправилось: ' + r + (r === 'blocked' ? ' — нажмите «Старт» у бота' : ''));
+}
+
 /* ---------------- маршруты ---------------- */
 const text = (s, status) => new Response(s, { status: status || 200, headers: { 'content-type': 'text/plain; charset=utf-8', 'access-control-allow-origin': '*' } });
 
 export default {
-  async fetch(request) {
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(runDaily(env).then((r) => console.log('daily', JSON.stringify(r))).catch((e) => console.log('daily error', e.message)));
+  },
+  async fetch(request, env) {
     const url = new URL(request.url);
+    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
+    if (request.method === 'POST' && url.pathname.startsWith('/api/')) return api(request, env, url.pathname);
     if (request.method !== 'GET' && request.method !== 'HEAD') return text('Method not allowed', 405);
+    if (url.pathname === '/remind/test' || url.pathname === '/remind/status') {
+      try { return await remindAdmin(url, env); } catch (e) { return text('Ошибка: ' + e.message, 500); }
+    }
     const m = /^\/(cal|sub)\/([^/]+?)(?:\.ics)?\/?$/.exec(url.pathname);
     if (url.pathname === '/' || url.pathname === '') return text('schedule-cal работает');
     if (!m) return text('Не найдено', 404);
@@ -302,4 +526,4 @@ export default {
 };
 
 /* для локальных тестов (node) */
-export { buildICS, slugOf, applyChanges, readOpts, subPage };
+export { buildICS, slugOf, applyChanges, readOpts, subPage, buildMessage, runDaily, tgUser, api };
