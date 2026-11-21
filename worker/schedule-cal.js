@@ -274,14 +274,16 @@ function subPage(host, group, o, ua) {
 
 
 /* =====================================================================
-   Ежедневное сообщение «Завтра у тебя…» от бота (в 20:00 по Минску)
+   Ежедневное сообщение «Завтра у тебя…» от бота — каждый выбирает время сам (17:00–23:00 по Минску, по умолчанию 20:00)
    Нужно в настройках воркера (см. worker/README.md):
      KV-хранилище с именем переменной KV, секреты BOT_TOKEN и STATS_KEY,
-     Cron Trigger «0-9 17 * * *» (17:00–17:09 UTC = 20:00–20:09 Минск).
+     Cron Trigger «0-9 14-20 * * *» (каждый час 14–20 UTC = 17–23 Минск, первые 10 минут).
    Без них календарь работает как раньше, просто рассылки нет.
    ===================================================================== */
 const STATS_API = 'https://schedule-stats.yotonick.workers.dev';  // откуда брать список людей
 const DEV_USERNAME = 'yotonick';                                   // кому слать тестовое сообщение
+const HOURS = [17, 18, 19, 20, 21, 22, 23];   // из чего можно выбрать время (по Минску)
+const DEF_HOUR = 20;
 const BATCH = 40;        // сколько сообщений за один запуск (лимит бесплатного Cloudflare — 50 запросов наружу)
 const WDN = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
 const MON = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
@@ -336,11 +338,13 @@ function buildMessage(data, notices, group, meta) {
       if (todayHas && meta.sd && prev && meta.sd >= prev) L.push('', '⚠️ Твоя серия 🔥' + st + ' сгорит в полночь — открой приложение сегодня');
     }
   }
-  L.push('', '<i>Отключить: в приложении → Настройки → Уведомления</i>');
+  L.push('', '<i>Время и отключение: в приложении → Настройки → Уведомления</i>');
   return L.join('\n');
 }
 
-/* --- хранилище: ключ rem:u:<id>, всё в metadata {grp, off, blk, st, sd} --- */
+/* --- хранилище: ключ rem:u:<id>, всё в metadata {grp, off, blk, st, sd, hr} --- */
+const hourOf = (m) => HOURS.includes(+m.hr) ? +m.hr : DEF_HOUR;
+const minskHour = () => new Date(Date.now() + TZ_OFFSET * 3600e3).getUTCHours();
 async function getMeta(env, id) { const r = await env.KV.getWithMetadata('rem:u:' + id); return (r && r.metadata) || {}; }
 async function putMeta(env, id, m) { await env.KV.put('rem:u:' + id, '1', { metadata: m }); }
 async function allMeta(env) {
@@ -374,11 +378,13 @@ async function tgSend(env, chatId, textMsg, date) {
 }
 const remReady = (env) => !!(env && env.KV && env.BOT_TOKEN && env.STATS_KEY);
 
-/* один запуск рассылки (cron вызывает его 10 раз подряд по минуте — так влезаем в лимиты) */
+/* один запуск рассылки. Cron вызывает его каждую минуту с :00 до :09 каждого часа 17–23 (по Минску).
+   За запуск — тем, чьё время уже наступило и кто сегодня ещё не получал (до 40 человек, лимит Cloudflare). */
 async function runDaily(env) {
   if (!remReady(env)) return { skipped: 'не настроены KV / BOT_TOKEN / STATS_KEY' };
-  const T = minskKey(0);
-  if (await env.KV.get('rem:done:' + T)) return { done: true };
+  const T = minskKey(0), H = minskHour();
+  if (H < HOURS[0]) return { skipped: 'ещё рано' };
+  if (await env.KV.get('rem:done:' + T + ':' + H)) return { done: true };
   const [users, metas, st] = await Promise.all([statsUsers(env), allMeta(env), load()]);
   const sent = new Set(JSON.parse((await env.KV.get('rem:sent:' + T)) || '[]'));
   const res = { ok: 0, blocked: 0, skipped: 0, errors: [] };
@@ -388,6 +394,7 @@ async function runDaily(env) {
     if (sent.has(id)) continue;
     const meta = metas[id] || {};
     const group = meta.grp || u.grp;
+    if (hourOf(meta) > H) continue;                                   // время этого человека ещё не наступило
     if (meta.off || meta.blk || !group || !st.data.groups.includes(group)) { sent.add(id); res.skipped++; continue; }
     const msg = buildMessage(st.data, st.notices, group, meta);
     if (!msg) { sent.add(id); res.skipped++; continue; }
@@ -401,7 +408,7 @@ async function runDaily(env) {
     sent.add(id);
   }
   await env.KV.put('rem:sent:' + T, JSON.stringify([...sent]), { expirationTtl: 3 * 86400 });
-  if (finished) await env.KV.put('rem:done:' + T, '1', { expirationTtl: 3 * 86400 });
+  if (finished) await env.KV.put('rem:done:' + T + ':' + H, '1', { expirationTtl: 3 * 86400 });
   return Object.assign(res, { finished });
 }
 
@@ -434,13 +441,15 @@ async function api(request, env, path) {
   const id = String(u.id), meta = await getMeta(env, id);
   const st = await load().catch(() => null);
   const okGroup = (g) => g && st && st.data.groups.includes(g);
-  if (path === '/api/me') return json({ ok: true, prefs: { evening: !meta.off }, reachable: !meta.blk });
+  const out = () => json({ ok: true, prefs: { evening: !meta.off, hour: hourOf(meta) }, hours: HOURS, reachable: !meta.blk });
+  if (path === '/api/me') return out();
   if (path === '/api/settings') {
     const pr = body.prefs || {};
     if (typeof pr.evening === 'boolean') { if (pr.evening) { delete meta.off; delete meta.blk; } else meta.off = 1; }
     if (okGroup(pr.group)) meta.grp = pr.group;
+    if (HOURS.includes(+pr.hour)) meta.hr = +pr.hour;
     await putMeta(env, id, meta);
-    return json({ ok: true, prefs: { evening: !meta.off }, reachable: !meta.blk });
+    return out();
   }
   if (path === '/api/hello') {
     const streak = Math.max(0, Math.min(10000, +body.streak | 0));
@@ -460,11 +469,13 @@ async function remindAdmin(url, env) {
   if (url.searchParams.get('key') !== env.STATS_KEY) return text('Неверный key', 403);
   const T = minskKey(0);
   if (url.pathname === '/remind/status') {
-    const [users, metas, sent, done] = await Promise.all([statsUsers(env), allMeta(env), env.KV.get('rem:sent:' + T), env.KV.get('rem:done:' + T)]);
-    const m = Object.values(metas);
+    const [users, metas, sent] = await Promise.all([statsUsers(env), allMeta(env), env.KV.get('rem:sent:' + T)]);
+    const m = Object.values(metas), byH = {};
+    for (const u of users) { const x = metas[String(u.id)] || {}; if (!x.off && !x.blk) { const hh = hourOf(x); byH[hh] = (byH[hh] || 0) + 1; } }
     return text('Людей в статистике: ' + users.length + '\nОтключили напоминания: ' + m.filter((x) => x.off).length +
       '\nБот не может написать (не нажимали «Старт»): ' + m.filter((x) => x.blk).length +
-      '\nСегодня обработано: ' + (sent ? JSON.parse(sent).length : 0) + (done ? ' (рассылка завершена)' : ''));
+      '\nВремя отправки: ' + HOURS.filter((hh) => byH[hh]).map((hh) => hh + ':00 — ' + byH[hh]).join(', ') +
+      '\nСегодня уже получили или пропущены: ' + (sent ? JSON.parse(sent).length : 0));
   }
   const users = await statsUsers(env);
   const me = users.find((u) => String(u.username || '').toLowerCase() === DEV_USERNAME);

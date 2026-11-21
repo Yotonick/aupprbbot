@@ -1493,7 +1493,8 @@ function stVisit(ping){lastPing=Date.now();stPost('/api/visit',ping?{ping:1}:{})
 /* ---------- вечернее сообщение от бота «Завтра у тебя…» (воркер schedule-cal, см. worker/README.md) ---------- */
 /* Адрес воркера. Пусто — раздел уведомлений скрыт. */
 const NOTIFY_API='https://schedule-cal.yotonick.workers.dev';
-let nf=Object.assign({evening:true},store.get('sch.notify')||{});
+let nf=Object.assign({evening:true,hour:20},store.get('sch.notify')||{});
+let nfHours=[17,18,19,20,21,22,23];
 let nfReach=null;                       // null — неизвестно, false — бот не может написать (не нажимали «Старт»)
 let nfReady=false;                      // воркер ответил — значит рассылка настроена
 const nfOK=()=>!!(NOTIFY_API&&inTg&&tg.initData);
@@ -1507,6 +1508,8 @@ function nfApply(j){
   if(!j)return;
   nfReady=true;
   if(j.prefs&&typeof j.prefs.evening==='boolean')nf.evening=j.prefs.evening;
+  if(j.prefs&&j.prefs.hour)nf.hour=+j.prefs.hour;
+  if(Array.isArray(j.hours)&&j.hours.length)nfHours=j.hours;
   if(typeof j.evening==='boolean')nf.evening=j.evening;
   if(typeof j.reachable==='boolean'){nfReach=j.reachable;if(!j.reachable)store.del('sch.rmbOk')}
   store.set('sch.notify',nf);
@@ -1526,7 +1529,7 @@ async function nfSave(patch,needWrite){
   const prev=Object.assign({},nf);Object.assign(nf,patch);
   try{
     if(needWrite&&!(await nfWrite())){Object.assign(nf,prev);toast('Разрешите боту писать вам — иначе сообщения не придут',true);if(view==='set')renderSettings();return false}
-    nfApply(await nfCall('/api/settings',{prefs:{group:settings.group,evening:!!nf.evening}}));
+    nfApply(await nfCall('/api/settings',{prefs:{group:settings.group,evening:!!nf.evening,hour:+nf.hour}}));
     if(needWrite)store.set('sch.rmbOk',1);
     renderRmb();
     return true;
@@ -1535,13 +1538,15 @@ async function nfSave(patch,needWrite){
 function nfHTML(){
   if(!nfOK()||!nfReady)return '';
   return '<div class="grp"><h4>Уведомления</h4><div class="box">'+
-    '<div class="row"><span style="white-space:normal;min-width:0">Расписание на завтра<small>Сообщение от бота каждый вечер в 20:00</small></span><button class="tog'+(nf.evening?' on':'')+'" id="nfEve"></button></div>'+
+    '<div class="row"><span style="white-space:normal;min-width:0">Расписание на завтра<small>Сообщение от бота каждый вечер</small></span><button class="tog'+(nf.evening?' on':'')+'" id="nfEve"></button></div>'+
+    (nf.evening?'<div class="row"><span>Во сколько</span><select id="nfHr">'+nfHours.map(h=>'<option value="'+h+'"'+(+nf.hour===h?' selected':'')+'>'+h+':00</option>').join('')+'</select></div>':'')+
     (nf.evening&&nfReach===false?'<div class="pad"><button class="btn p" id="nfFix">🔔 Разрешить боту писать</button><p class="info" style="margin-top:8px;padding:0 2px">Сейчас бот не может отправить вам сообщение. Нажмите и разрешите — или нажмите «Старт» в чате с ботом.</p></div>':'')+
     '</div></div>';
 }
 function nfBind(){
   const e=$('#nfEve');
-  if(e)e.onclick=async()=>{const v=!nf.evening;if(await nfSave({evening:v},v)){renderSettings();toast(v?'Каждый вечер пришлём расписание на завтра':'Вечерние сообщения выключены')}};
+  if(e)e.onclick=async()=>{const v=!nf.evening;if(await nfSave({evening:v},v)){renderSettings();toast(v?'Каждый вечер в '+nf.hour+':00 пришлём расписание на завтра':'Вечерние сообщения выключены')}};
+  const hr=$('#nfHr');if(hr)hr.onchange=async ev=>{if(await nfSave({hour:+ev.target.value}))toast('Теперь сообщение будет приходить в '+nf.hour+':00')};
   const f=$('#nfFix');if(f)f.onclick=async()=>{if(await nfSave({evening:true},true))toast('Готово — вечером придёт сообщение')};
 }
 /* плашка на главном: «Присылать вечером расписание на завтра?» — один раз, пока человек не разрешил боту писать */
@@ -1552,7 +1557,7 @@ function renderRmb(){
   el.className='ann rmb'+(show?' show':'');
   el.innerHTML=show?'<span>🔔 Присылать каждый вечер расписание на завтра?</span><b id="rmbYes">Включить</b><i id="rmbNo">✕</i>':'';
   if(!show)return;
-  $('#rmbYes').onclick=async e=>{e.stopPropagation();if(await nfSave({evening:true},true))toast('Готово — в 20:00 придёт расписание на завтра')};
+  $('#rmbYes').onclick=async e=>{e.stopPropagation();if(await nfSave({evening:true},true))toast('Готово — в '+nf.hour+':00 придёт расписание на завтра. Время можно поменять в Настройках')};
   $('#rmbNo').onclick=e=>{e.stopPropagation();store.set('sch.rmbHide',Date.now()+7*864e5);renderRmb()};
 }
 
