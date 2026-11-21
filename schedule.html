@@ -403,6 +403,14 @@ nav svg{width:26px;height:26px}
 .calw .cwr span{display:block;color:var(--muted);font-size:13px;font-weight:600;margin-top:1px}
 .sj .seg button{font-size:13.5px;white-space:nowrap;padding:9px 4px}
 .sj .row>span:first-child{white-space:normal;min-width:0}
+/* ---------- v2.4: серия и вечерние сообщения ---------- */
+.stk{display:none;height:28px;padding:0 10px;border-radius:14px;background:rgba(255,149,0,.16);color:#ff9f0a;font-weight:800;font-size:calc(14px*var(--k));align-items:center;flex:none}
+.stk.show{display:inline-flex}
+.ann.rmb{white-space:normal;display:none;align-items:center;gap:10px;cursor:default}
+.ann.rmb.show{display:flex}
+.ann.rmb span{flex:1;min-width:0}
+.ann.rmb b{background:var(--accent);color:#fff;border-radius:12px;padding:7px 12px;font-size:calc(14px*var(--k));cursor:pointer;flex:none}
+.ann.rmb i{font-style:normal;color:var(--muted);padding:4px 2px 4px 6px;cursor:pointer;flex:none}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -415,8 +423,9 @@ nav svg{width:26px;height:26px}
         <h1 id="ttl"></h1>
         <div class="hbtns"><button class="cal" id="calBtn" aria-label="Календарь"></button></div>
       </div>
-      <div class="sub"><span id="sub"></span><button class="today-btn" id="todayBtn">↩ Сегодня</button></div>
+      <div class="sub"><span id="sub"></span><button class="stk" id="stk"></button><button class="today-btn" id="todayBtn">↩ Сегодня</button></div>
       <button class="ann" id="ann"></button>
+      <div class="ann rmb" id="rmb"></div>
       <button class="next" id="next"></button>
       <div class="strip" id="strip"></div>
     </header>
@@ -794,7 +803,7 @@ nav svg{width:26px;height:26px}
 const $=(s,r=document)=>r.querySelector(s);
 const tg=window.Telegram&&window.Telegram.WebApp;
 const inTg=!!(tg&&tg.platform&&tg.platform!=='unknown');
-const APP_VER='2.3';
+const APP_VER='2.4';
 const XLSX_URL='schedule.xlsx';
 const NOTICES_URL='notices.json';
 const MONTHS=['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
@@ -1057,7 +1066,7 @@ function renderHead(){
     if(!(byDate[key(d)]||[]).length)extra=' · сегодня свободно';
     else for(let i=1;i<=7;i++){if(!(byDate[key(addDays(d,i))]||[]).length){extra=i===1?' · завтра выходной':' · до выходного '+i+' '+plural(i,'день','дня','дней');break}}
   }
-  $('#sub').textContent=inRange(d)?n+'-ая учебная неделя'+extra:'Вне учебного расписания';
+  $('#sub').textContent=inRange(d)?n+'-я учебная неделя'+extra:'Вне учебного расписания';
   $('#calBtn').textContent=d.getDate();
   $('#todayBtn').classList.toggle('show',key(d)!==key(new Date()));
   const m=monday(d),td=key(new Date());
@@ -1066,7 +1075,7 @@ function renderHead(){
     return '<button class="sd'+(k===key(d)?' sel':'')+(k===td?' tod':'')+(has?'':' off')+'" data-k="'+k+'"><span class="w">'+WD[i]+'</span><span class="n">'+x.getDate()+'</span>'+(has?'<i class="dot"></i>':'')+'</button>';
   }).join('');
 }
-function renderAll(keepScroll){renderHead();renderPanels(keepScroll);renderNext();renderAnn()}
+function renderAll(keepScroll){renderHead();renderPanels(keepScroll);renderNext();renderAnn();renderStreak();renderRmb()}
 function tick(){try{tg&&tg.HapticFeedback&&tg.HapticFeedback.selectionChanged()}catch(e){}}
 function slide(dir,target){
   const W=pager.clientWidth;
@@ -1264,7 +1273,7 @@ function renderWeek(){
   const sameM=m.getMonth()===e.getMonth();
   $('#wkTtl').textContent=m.getDate()+(sameM?'':' '+MONTHS[m.getMonth()].slice(0,3))+' – '+e.getDate()+' '+MONTHS[e.getMonth()].slice(0,3);
   const n=weekNo(m);
-  $('#wkSub').textContent=(n>=1&&n<=data.weeks[data.weeks.length-1].n)?n+'-ая учебная неделя':'Вне учебного расписания';
+  $('#wkSub').textContent=(n>=1&&n<=data.weeks[data.weeks.length-1].n)?n+'-я учебная неделя':'Вне учебного расписания';
   $('#wkToday').classList.toggle('show',key(monday(new Date()))!==key(m));
   let cnt=0;
   const html=Array.from({length:7},(_,i)=>{
@@ -1481,10 +1490,12 @@ function stPost(path,body){
 }
 function stVisit(ping){lastPing=Date.now();stPost('/api/visit',ping?{ping:1}:{})}
 
-/* ---------- уведомления (через бота и Cloudflare Worker) ---------- */
-/* Адрес воркера вида https://schedule-bot.ИМЯ.workers.dev (без / на конце). Пусто — раздел скрыт. */
-const NOTIFY_API='';
-let nf=Object.assign({active:false,lead:10,morning:false,evening:false,updates:true},store.get('sch.notify')||{});
+/* ---------- вечернее сообщение от бота «Завтра у тебя…» (воркер schedule-cal, см. worker/README.md) ---------- */
+/* Адрес воркера. Пусто — раздел уведомлений скрыт. */
+const NOTIFY_API='https://schedule-cal.yotonick.workers.dev';
+let nf=Object.assign({evening:true},store.get('sch.notify')||{});
+let nfReach=null;                       // null — неизвестно, false — бот не может написать (не нажимали «Старт»)
+let nfReady=false;                      // воркер ответил — значит рассылка настроена
 const nfOK=()=>!!(NOTIFY_API&&inTg&&tg.initData);
 async function nfCall(path,body){
   const r=await fetch(NOTIFY_API+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(Object.assign({initData:tg.initData},body))});
@@ -1492,12 +1503,18 @@ async function nfCall(path,body){
   if(!r.ok||!j.ok)throw new Error(j.error||('HTTP '+r.status));
   return j;
 }
+function nfApply(j){
+  if(!j)return;
+  nfReady=true;
+  if(j.prefs&&typeof j.prefs.evening==='boolean')nf.evening=j.prefs.evening;
+  if(typeof j.evening==='boolean')nf.evening=j.evening;
+  if(typeof j.reachable==='boolean'){nfReach=j.reachable;if(!j.reachable)store.del('sch.rmbOk')}
+  store.set('sch.notify',nf);
+  renderRmb();if(view==='set')renderSettings();
+}
 async function nfLoad(){
   if(!nfOK())return;
-  try{
-    const j=await nfCall('/api/me',{});
-    if(j.prefs){nf=Object.assign(nf,j.prefs);delete nf.group;store.set('sch.notify',nf);if(view==='set')renderSettings()}
-  }catch(e){console.warn('notify:',e.message)}
+  try{nfApply(await nfCall('/api/me',{}))}catch(e){console.warn('notify:',e.message)}
 }
 function nfWrite(){
   return new Promise(res=>{
@@ -1508,27 +1525,74 @@ function nfWrite(){
 async function nfSave(patch,needWrite){
   const prev=Object.assign({},nf);Object.assign(nf,patch);
   try{
-    if(needWrite&&!(await nfWrite())){Object.assign(nf,prev);toast('Разрешите боту писать вам — иначе напоминания не придут',true);if(view==='set')renderSettings();return false}
-    await nfCall('/api/settings',{prefs:{group:settings.group,active:nf.active,lead:+nf.lead,morning:nf.morning,evening:nf.evening,updates:nf.updates}});
-    store.set('sch.notify',nf);return true;
+    if(needWrite&&!(await nfWrite())){Object.assign(nf,prev);toast('Разрешите боту писать вам — иначе сообщения не придут',true);if(view==='set')renderSettings();return false}
+    nfApply(await nfCall('/api/settings',{prefs:{group:settings.group,evening:!!nf.evening}}));
+    if(needWrite)store.set('sch.rmbOk',1);
+    renderRmb();
+    return true;
   }catch(e){Object.assign(nf,prev);toast('Не удалось сохранить: '+e.message,true);if(view==='set')renderSettings();return false}
 }
 function nfHTML(){
-  if(!nfOK())return '';
-  const opts=[[0,'Не напоминать'],[5,'За 5 минут'],[10,'За 10 минут'],[15,'За 15 минут'],[20,'За 20 минут'],[30,'За 30 минут'],[60,'За час']];
-  const tog=(id,t,on)=>'<div class="row"><span>'+t+'</span><button class="tog'+(on?' on':'')+'" id="'+id+'"></button></div>';
-  return '<div class="grp"><h4>Уведомления</h4><div class="box">'+tog('nfOn','Напоминания в Telegram',nf.active)+
-    (nf.active?'<div class="row"><span>Перед парой</span><select id="nfLead">'+opts.map(([v,t])=>'<option value="'+v+'"'+(+nf.lead===v?' selected':'')+'>'+t+'</option>').join('')+'</select></div>'+
-      tog('nfMorn','Утренняя сводка',nf.morning)+tog('nfEve','Вечером про завтра',nf.evening)+tog('nfUpd','Расписание обновилось',nf.updates):'')+
-    '</div><p class="info" style="margin-top:8px">Сообщения приходят от бота в Telegram. Утренняя сводка — в 7:30, вечерняя — в 20:00.</p></div>';
+  if(!nfOK()||!nfReady)return '';
+  return '<div class="grp"><h4>Уведомления</h4><div class="box">'+
+    '<div class="row"><span style="white-space:normal;min-width:0">Расписание на завтра<small>Сообщение от бота каждый вечер в 20:00</small></span><button class="tog'+(nf.evening?' on':'')+'" id="nfEve"></button></div>'+
+    (nf.evening&&nfReach===false?'<div class="pad"><button class="btn p" id="nfFix">🔔 Разрешить боту писать</button><p class="info" style="margin-top:8px;padding:0 2px">Сейчас бот не может отправить вам сообщение. Нажмите и разрешите — или нажмите «Старт» в чате с ботом.</p></div>':'')+
+    '</div></div>';
 }
 function nfBind(){
-  if(!nfOK())return;
-  const on=$('#nfOn');if(!on)return;
-  on.onclick=async()=>{const v=!nf.active;const ok=await nfSave(v?{active:true,lead:nf.lead||10}:{active:false},v);if(ok){renderSettings();toast(v?'Напоминания включены':'Напоминания выключены')}};
-  const bind=(id,k)=>{const b=$(id);if(b)b.onclick=async()=>{if(await nfSave({[k]:!nf[k]}))renderSettings()}};
-  bind('#nfMorn','morning');bind('#nfEve','evening');bind('#nfUpd','updates');
-  const l=$('#nfLead');if(l)l.onchange=async e=>{await nfSave({lead:+e.target.value})};
+  const e=$('#nfEve');
+  if(e)e.onclick=async()=>{const v=!nf.evening;if(await nfSave({evening:v},v)){renderSettings();toast(v?'Каждый вечер пришлём расписание на завтра':'Вечерние сообщения выключены')}};
+  const f=$('#nfFix');if(f)f.onclick=async()=>{if(await nfSave({evening:true},true))toast('Готово — вечером придёт сообщение')};
+}
+/* плашка на главном: «Присылать вечером расписание на завтра?» — один раз, пока человек не разрешил боту писать */
+function renderRmb(){
+  const el=$('#rmb');if(!el)return;
+  const hideTill=+store.get('sch.rmbHide')||0;
+  const show=nfOK()&&nfReady&&nf.evening&&!store.get('sch.rmbOk')&&Date.now()>hideTill&&!!data;
+  el.className='ann rmb'+(show?' show':'');
+  el.innerHTML=show?'<span>🔔 Присылать каждый вечер расписание на завтра?</span><b id="rmbYes">Включить</b><i id="rmbNo">✕</i>':'';
+  if(!show)return;
+  $('#rmbYes').onclick=async e=>{e.stopPropagation();if(await nfSave({evening:true},true))toast('Готово — в 20:00 придёт расписание на завтра')};
+  $('#rmbNo').onclick=e=>{e.stopPropagation();store.set('sch.rmbHide',Date.now()+7*864e5);renderRmb()};
+}
+
+/* ---------- серия: сколько учебных дней подряд человек заходит ---------- */
+/* Дни без пар (выходные, каникулы) серию не сбивают. */
+let visits=(store.get('sch.days')||[]).filter(k=>/^\d{4}-\d{2}-\d{2}$/.test(k));
+function markVisit(){
+  const k=key(new Date());
+  if(!visits.includes(k)){visits.push(k);visits=visits.slice(-400);store.set('sch.days',visits)}
+}
+function streakNow(){
+  const set=new Set(visits),t=new Date();let n=0;
+  for(let i=0;i<400;i++){
+    const k=key(addDays(t,-i));
+    if(set.has(k))n++;
+    else if(i===0)continue;
+    else if(!(byDate[k]||[]).length)continue;
+    else break;
+  }
+  return n;
+}
+const STK_MS=[3,7,14,30,50,100,150,200];
+function renderStreak(){
+  const el=$('#stk');if(!el)return;
+  const n=data?streakNow():0;
+  el.classList.toggle('show',n>=2);
+  el.textContent='🔥 '+n;
+  const ms=+store.get('sch.stkMs')||0;
+  if(STK_MS.includes(n)&&ms<n){
+    store.set('sch.stkMs',n);
+    setTimeout(()=>{toast('🔥 '+n+' '+plural(n,'день','дня','дней')+' подряд! Так держать');try{tg&&tg.HapticFeedback&&tg.HapticFeedback.notificationOccurred('success')}catch(e){}},1800);
+  }
+}
+$('#stk').onclick=()=>{const n=streakNow();toast('🔥 Серия: '+n+' '+plural(n,'день','дня','дней')+' подряд. Заходи каждый учебный день — выходные не сбивают')};
+/* раз в день сообщаем воркеру серию — вечернее сообщение напомнит её не терять */
+function nfHello(){
+  if(!nfOK()||!data||!settings.group)return;
+  const k=key(new Date()),n=streakNow(),last=store.get('sch.hello')||{};
+  if(last.d===k&&last.n===n&&last.g===settings.group)return;
+  nfCall('/api/hello',{streak:n,day:k,group:settings.group}).then(j=>{store.set('sch.hello',{d:k,n,g:settings.group});nfApply(j)}).catch(e=>console.warn('hello:',e.message));
 }
 
 /* ---------- подписка на календарь телефона (Cloudflare Worker, папка worker/) ---------- */
@@ -1729,7 +1793,7 @@ function minuteTick(){
   if(!document.hidden&&Date.now()-lastPing>55*1000)stVisit(true);
 }
 setInterval(minuteTick,30000);
-document.addEventListener('visibilitychange',()=>{if(!document.hidden){minuteTick();maybeSync();if(Date.now()-lastN>30*1000)loadNotices();if(Date.now()-lastPing>20*1000)stVisit(true)}});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){markVisit();renderStreak();nfHello();minuteTick();maybeSync();if(Date.now()-lastN>30*1000)loadNotices();if(Date.now()-lastPing>20*1000)stVisit(true)}});
 
 /* ---------- первый запуск: выбор группы + обучение ---------- */
 const LOGO=($('#splash svg')||{outerHTML:''}).outerHTML;
@@ -1831,7 +1895,8 @@ function boot(){
   maybeOnboard();
   setTimeout(maybeNotice,1600);
   stVisit(false);
-  nfLoad();
+  markVisit();renderStreak();
+  nfLoad().then(nfHello);
 }
 try{if(tg){tg.ready();tg.expand();tg.disableVerticalSwipes&&tg.disableVerticalSwipes()}}catch(e){}
 applyTheme();
